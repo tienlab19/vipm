@@ -20,8 +20,6 @@ struct ProductTourView: View {
               detail: "Short on time? Practice a quick random pack of 10, 20 or 30 questions."),
         .init(icon: "timer", title: "Time Trial",
               detail: "Sharpen your speed — answer a timed set under pressure, just like exam day."),
-        .init(icon: "scope", title: "Topic Mastery",
-              detail: "Pick the parts you want and practice them together to master weak areas."),
         .init(icon: "arrow.triangle.2.circlepath", title: "Review what matters",
               detail: "Revisit your incorrect, missed, and bookmarked questions any time."),
     ]
@@ -32,7 +30,7 @@ struct ProductTourView: View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
-                Button("Skip") { onFinish() }
+                Button("Skip") { Track.log("tour_skip", ["step": index]); onFinish() }
                     .font(.system(size: 14, weight: .medium)).foregroundStyle(Color(0xC7D8EA))
                     .frame(minHeight: 44).padding(.horizontal, 8)
             }
@@ -74,7 +72,7 @@ struct ProductTourView: View {
                         .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.28), lineWidth: 1.5))
                 }
                 Button(isLast ? "Get started" : "Next") {
-                    if isLast { onFinish() } else { withAnimation { index += 1 } }
+                    if isLast { onFinish() } else { withAnimation { index += 1 }; Track.log("tour_step", ["step": index]) }
                 }
                 .font(.h(15.5)).foregroundStyle(Color.navy)
                 .frame(maxWidth: .infinity).padding(.vertical, 17)

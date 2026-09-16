@@ -34,6 +34,13 @@ extension View {
             .shadow(color: Color.navy.opacity(0.06), radius: 18, y: 9)
             .shadow(color: Color.navy.opacity(0.03), radius: 3, y: 1)
     }
+
+    func pinnedHeader(background: Color = .bg) -> some View {
+        self.frame(maxWidth: .infinity)
+            .background(background)
+            .overlay(alignment: .bottom) { Divider() }
+            .zIndex(1)
+    }
 }
 
 struct IconChip: View {

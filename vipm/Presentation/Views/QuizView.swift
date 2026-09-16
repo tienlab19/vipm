@@ -13,6 +13,7 @@ struct QuizHost: View {
         Group {
             if let quiz {
                 QuizView(quiz: quiz, path: $path, retake: {
+                    Track.log("quiz_retake", ["quiz_key": key])
                     self.quiz = viewModel.retake(quiz)
                 }).id(quiz.session.draft.id)
             } else if loaded {
@@ -23,7 +24,14 @@ struct QuizHost: View {
             } else { ProgressView() }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task { if !loaded { quiz = viewModel.session(for: key); loaded = true } }
+        .task {
+            if !loaded {
+                quiz = viewModel.session(for: key)
+                loaded = true
+                Track.log(quiz == nil ? "quiz_unavailable" : "quiz_start",
+                          ["quiz_key": key, "question_count": quiz?.session.questions.count ?? 0])
+            }
+        }
     }
 }
 
@@ -66,15 +74,25 @@ struct QuizView: View {
         }
         .onDisappear { viewModel.saveDraft(quiz) }
         .confirmationDialog("Leave this attempt?", isPresented: $showExit, titleVisibility: .visible) {
-            Button("Save and leave") { viewModel.saveDraft(quiz); dismiss() }
+            Button("Save and leave") {
+                Track.log("quiz_exit", ["index": session.index, "answered": session.answeredCount, "is_exam": isExam])
+                viewModel.saveDraft(quiz)
+                dismiss()
+            }
             Button("Keep studying", role: .cancel) {}
         } message: {
             session.deadline == nil ? Text("Your answers and position will be saved.") : Text("Your answers will be saved. The exam timer keeps running.")
         }
         .confirmationDialog("Submit this attempt?", isPresented: $showSubmit, titleVisibility: .visible) {
-            Button("Submit answers") { viewModel.finish(quiz) }
+            Button("Submit answers") {
+                viewModel.finish(quiz)
+                Track.log("quiz_submit", ["is_exam": isExam, "score": Int((quiz.session.score * 100).rounded()),
+                                          "correct": quiz.session.correctCount, "graded": quiz.session.gradedQuestions.count,
+                                          "unanswered": quiz.session.missedCount, "elapsed_sec": Int(quiz.session.elapsed)])
+            }
             Button("Keep reviewing", role: .cancel) {}
         } message: { Text("\(session.missedCount) unanswered. You can review explanations after submitting.") }
+        .onChange(of: showNavigator) { _, shown in if shown { Track.log("exam_navigator_open") } }
         .sheet(isPresented: $showNavigator) {
             ExamNavigator(session: session, jump: { quiz.jump(to: $0) }, submit: { showSubmit = true })
         }
@@ -84,6 +102,9 @@ struct QuizView: View {
         guard !session.finished else { return }
         now = date
         viewModel.updateTime(date, for: quiz)
+        if session.finished {
+            Track.log("quiz_timeout", ["answered": session.answeredCount, "score": Int((session.score * 100).rounded())])
+        }
     }
 
     private func topBar(_ question: Question) -> some View {
@@ -107,7 +128,10 @@ struct QuizView: View {
                 Text("Question \(session.index + 1) of \(session.questions.count)").font(.system(size: 12.5)).foregroundStyle(Color.slate)
                 Spacer()
                 if isExam {
-                    Button { quiz.toggleFlag(question) } label: {
+                    Button {
+                        quiz.toggleFlag(question)
+                        Track.log("question_flag_toggle", ["flagged": session.flags.contains(question.id)])
+                    } label: {
                         Label {
                             session.flags.contains(question.id) ? Text("Flagged") : Text("Flag")
                         } icon: {
@@ -118,7 +142,10 @@ struct QuizView: View {
                     .tint(session.flags.contains(question.id) ? Color(0xB45309) : Color.brand)
                     .accessibilityLabel(session.flags.contains(question.id) ? Text("Remove flag for review") : Text("Flag for review"))
                 }
-                Button { viewModel.toggleBookmark(question) } label: {
+                Button {
+                    viewModel.toggleBookmark(question)
+                    Track.log("bookmark_toggle", ["saved": viewModel.study.bookmarks.contains(question.id), "source": "quiz"])
+                } label: {
                     Label {
                         viewModel.study.bookmarks.contains(question.id) ? Text("Saved") : Text("Save")
                     } icon: {
@@ -190,7 +217,12 @@ struct QuizView: View {
         }
         return Group {
             if revealed { content }
-            else { Button { quiz.toggle(answer.id, on: question) } label: { content }.buttonStyle(.plain) }
+            else {
+                Button {
+                    quiz.toggle(answer.id, on: question)
+                    Track.log("answer_select", ["is_multi": question.isMulti])
+                } label: { content }.buttonStyle(.plain)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Answer \(answer.id). \(answer.text.plain)")
@@ -206,6 +238,7 @@ struct QuizView: View {
         return VStack(spacing: 4) {
             if needsCheck {
                 Button("Skip question") {
+                    Track.log("question_skip", ["index": session.index])
                     if session.isLast { showSubmit = true } else { quiz.move(by: 1) }
                 }.font(.subheadline).frame(minHeight: 44)
             }
@@ -225,6 +258,7 @@ struct QuizView: View {
                 PrimaryButton(title: title, color: .navy) {
                     if needsCheck {
                         viewModel.checkAnswer(quiz)
+                        Track.log("answer_check", ["correct": session.isCorrect(question)])
                     } else if session.isLast { showSubmit = true }
                     else { quiz.move(by: 1) }
                 }
@@ -250,6 +284,7 @@ struct ExamNavigator: View {
                         let flagged = session.flags.contains(question.id)
                         Button {
                             jump(index)
+                            Track.log("exam_navigator_jump", ["index": index])
                             dismiss()
                         } label: {
                             Text("\(index + 1)").font(.h(15)).monospacedDigit()
@@ -272,7 +307,11 @@ struct ExamNavigator: View {
                 VStack(spacing: 10) {
                     Text("\(session.answeredCount) answered · \(session.missedCount) unanswered · \(session.flags.count) flagged")
                         .font(.system(size: 13)).foregroundStyle(Color.slate)
-                    PrimaryButton(title: "Submit exam", color: .navy) { dismiss(); submit() }
+                    PrimaryButton(title: "Submit exam", color: .navy) {
+                        Track.log("exam_submit_tap", ["answered": session.answeredCount, "flagged": session.flags.count])
+                        dismiss()
+                        submit()
+                    }
                 }.padding(.horizontal, 20).padding(.bottom, 24)
             }
             .background(Color.bg).navigationTitle("Question map").navigationBarTitleDisplayMode(.inline)

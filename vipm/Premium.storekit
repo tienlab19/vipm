@@ -1,0 +1,42 @@
+{
+  "identifier" : "EA8D38D2-DBD1-4BED-85CF-BC4AC8E5126D",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "7.99",
+      "familyShareable" : false,
+      "internalID" : "35BC6A86-42A7-4D64-84AE-5612DB4256B0",
+      "localizations" : [
+        {
+          "description" : "Unlock the complete question bank, explanations, and unlimited practice exams.",
+          "displayName" : "Premium Lifetime Access",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "Mở khóa toàn bộ ngân hàng câu hỏi, lời giải và bài thi thử không giới hạn.",
+          "displayName" : "Premium trọn đời",
+          "locale" : "vi"
+        }
+      ],
+      "productID" : "com.viuniverse.pspo.one.premium",
+      "referenceName" : "Premium Lifetime Access",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

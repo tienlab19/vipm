@@ -5,8 +5,11 @@ import Observation
 final class StudyViewModel {
     private(set) var study: StudyUseCase
     private(set) var bankError: String?
+    private let reminderScheduler: (any ExamReminderScheduling)?
 
-    init(bankRepository: any QuestionBankRepository, progressRepository: any StudyProgressRepository, isPremium: Bool) {
+    init(bankRepository: any QuestionBankRepository, progressRepository: any StudyProgressRepository,
+         isPremium: Bool, reminderScheduler: (any ExamReminderScheduling)? = nil) {
+        self.reminderScheduler = reminderScheduler
         let bank: QuestionBank
         do { bank = try bankRepository.load() }
         catch { bank = .empty; bankError = error.localizedDescription }
@@ -15,9 +18,13 @@ final class StudyViewModel {
 
     var persistenceError: String? { study.persistenceError?.localizedDescription }
 
+    func setPremium(_ isPremium: Bool) { study.setPremium(isPremium) }
     func updateLearnerName(_ name: String) { study.updateLearnerName(name) }
+    func updateExamProfile(name: String, plannedExamDate: Date) {
+        study.updateExamProfile(name: name, plannedExamDate: plannedExamDate)
+        reminderScheduler?.schedule(for: plannedExamDate)
+    }
     func toggleBookmark(_ question: Question) { study.toggleBookmark(question) }
-    func setPendingTopics(_ ids: Set<String>) { study.setPendingTopics(ids) }
     func session(for key: String) -> QuizViewModel? { study.session(for: key).map(makeQuizViewModel) }
     func retake(_ previous: QuizViewModel) -> QuizViewModel { makeQuizViewModel(study.retake(previous.session)) }
     func saveDraft(_ quiz: QuizViewModel) { study.saveDraft(quiz.session) }

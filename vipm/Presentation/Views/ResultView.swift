@@ -18,6 +18,12 @@ struct ResultView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { actionBar }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $review) { ReviewList(session: session) }
+        .onChange(of: review) { _, shown in if shown { Track.log("result_review_open") } }
+        .onAppear {
+            Track.log("result_view", ["passed": passed, "is_exam": session.deadline != nil,
+                                      "score": Int((session.score * 100).rounded()),
+                                      "correct": session.correctCount, "graded": session.gradedQuestions.count])
+        }
     }
 
     private var actionBar: some View {
@@ -29,9 +35,9 @@ struct ResultView: View {
                         .background(.white, in: .rect(cornerRadius: 16))
                         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(0xD3DEEA), lineWidth: 1.5))
                 }
-                PrimaryButton(title: "Retake", action: retake)
+                PrimaryButton(title: "Retake") { Track.log("result_retake_tap"); retake() }
             }
-            Button("Back to home") { path.removeAll() }.font(.subheadline).frame(maxWidth: .infinity, minHeight: 44)
+            Button("Back to home") { Track.log("result_back_home"); path.removeAll() }.font(.subheadline).frame(maxWidth: .infinity, minHeight: 44)
         }
         .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 8)
         .background(.white).overlay(alignment: .top) { Divider() }

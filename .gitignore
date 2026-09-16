@@ -3,3 +3,7 @@ build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+
+# Reverse-engineered third-party APK artifacts (not app source)
+pspo1_extracted/
+pspo1_extracted_*.zip

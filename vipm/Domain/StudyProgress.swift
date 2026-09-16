@@ -2,6 +2,7 @@ import Foundation
 
 struct StudyProgress: Codable {
     var learnerName: String?
+    var plannedExamDate: Date?
     var bookmarks: Set<String> = []
     var answered: Set<String> = []
     var wrong: Set<String> = []

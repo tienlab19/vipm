@@ -7,6 +7,8 @@ struct SelfCheck {
         let input = URL(fileURLWithPath: CommandLine.arguments[1])
         let bank = try JSONQuestionBankRepository(url: input).load()
         assert(bank.isDemo && bank.parts.count == 1 && bank.parts[0].questions.count == 2)
+        let appBank = try JSONQuestionBankRepository(url: URL(fileURLWithPath: CommandLine.arguments[2])).load()
+        assert(!appBank.parts.isEmpty && !appBank.all.isEmpty, "The bundled question bank must decode.")
         let single = bank.parts[0].questions[0]
         let multi = bank.parts[0].questions[1]
         assert(single.correct == [2] && multi.correct == [1, 3])
@@ -125,6 +127,10 @@ struct SelfCheck {
         var unlocked = StudyUseCase(bank: exportBank, progressRepository: MemoryProgressRepository(), isPremium: true)
         assert(locked.unlockedQuestions.isEmpty && locked.session(for: "part") == nil)
         assert(unlocked.unlockedQuestions.count == 1 && unlocked.session(for: "part") != nil)
+        locked.setPremium(true)
+        assert(locked.unlockedQuestions.count == 1 && locked.session(for: "part") != nil)
+        locked.setPremium(false)
+        assert(locked.unlockedQuestions.isEmpty, "Revoked Premium access locks paid questions again.")
 
         let suite = "vipm.selfcheck.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else { fatalError("Test defaults unavailable") }
@@ -153,16 +159,17 @@ struct SelfCheck {
         assert(renamed.learnerName == "Refactored learner")
         legacyModel.updateLearnerName("   ")
         assert(legacyModel.study.learnerName == "Scrum learner")
+        let examDate = Date(timeIntervalSince1970: 1_800_000_000)
+        legacyModel.updateExamProfile(name: "  Exam candidate  ", plannedExamDate: examDate)
+        let examProfile = try repository.load()
+        assert(examProfile.learnerName == "Exam candidate")
+        assert(examProfile.plannedExamDate == Calendar.current.startOfDay(for: examDate))
 
         for localFlag in [false, true] {
             defaults.set(localFlag, forKey: "premium")
             let composed = makeStudyViewModel(defaults: defaults)
             assert(composed.bankError == nil && composed.study.bank.all.count == 2)
-            #if DEBUG
-            assert(composed.study.isPremium, "Debug bypass belongs to the composition root.")
-            #else
-            assert(!composed.study.isPremium, "Production must ignore local Premium flags.")
-            #endif
+            assert(!composed.study.isPremium, "Premium stays locked until StoreKit verifies an entitlement.")
         }
         let corrupt = Data("broken".utf8)
         defaults.set(corrupt, forKey: "studyProgress.v1")
@@ -186,8 +193,7 @@ struct SelfCheck {
         var examUse = StudyUseCase(bank: big, progressRepository: MemoryProgressRepository(), isPremium: false)
         let form = examUse.examForm()
         assert(form.count == examUse.examCount && Set(form.map(\.id)).count == form.count, "A form is 80 distinct questions.")
-        let perPart = Dictionary(grouping: form) { $0.id.prefix(2) }.mapValues(\.count)
-        assert(perPart.count == 4 && perPart.values.allSatisfy { $0 >= 5 }, "Every focus area is represented proportionally.")
+        assert(Set(form.map(\.id)).isSubset(of: Set(examUse.examQuestions.map(\.id))), "A form only uses the unlocked global pool.")
         assert(examUse.examForm().map(\.id) != form.map(\.id), "Each attempt draws a new form.")
         guard var examSession = examUse.session(for: "exam") else { fatalError("Cannot start exam") }
         assert(examSession.questions.count == examUse.examCount && examSession.answeredCount == 0)
@@ -203,6 +209,9 @@ struct SelfCheck {
         assert(resumedExam.index == 41 && resumedExam.answeredCount == 1, "Position and answers survive a resume.")
         examUse.finish(&examSession)
         assert(examSession.missedCount == 79 && examSession.score < examUse.passBar)
+        let retakenExam = examUse.retake(examSession)
+        assert(retakenExam.questions.map(\.id) == examSession.questions.map(\.id), "Retaking an exam keeps the same form and order.")
+        assert(retakenExam.deadline != nil && retakenExam.picks.isEmpty, "Retaking resets answers and the 60-minute timer.")
 
         let missing = StudyViewModel(bankRepository: JSONQuestionBankRepository(url: nil), progressRepository: MemoryProgressRepository(), isPremium: false)
         assert(missing.bankError != nil && missing.study.bank.all.isEmpty && missing.session(for: "exam") == nil)

@@ -1,18 +1,26 @@
 import SwiftUI
+import StoreKit
 
 struct GoProView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(PremiumStore.self) private var premiumStore
+    @State private var showRedeem = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.system(size: 19, weight: .medium))
-                            .foregroundStyle(Color(0xA9BED3)).frame(width: 44, height: 44)
-                    }.accessibilityLabel("Close Premium")
-                }
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(Color(0xA9BED3)).frame(width: 44, height: 44)
+                }.accessibilityLabel("Close Premium")
+            }
+            .padding(.horizontal, 14).padding(.vertical, 4)
+            .pinnedHeader(background: Color(0x101D2E))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
                 Image(systemName: "star").font(.system(size: 34, weight: .medium)).foregroundStyle(Color(0x1B1300))
                     .frame(width: 72, height: 72)
                     .background(LinearGradient(colors: [Color(0xFBBF57), .amber], startPoint: .topLeading, endPoint: .bottomTrailing), in: .rect(cornerRadius: 20))
@@ -26,23 +34,99 @@ struct GoProView: View {
                     benefit("Missed & incorrect review modes")
                     benefit("A focused, ad-free study experience")
                 }.padding(.top, 26)
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Coming soon").font(.h(28, .bold)).foregroundStyle(.white)
-                    Text("Purchases are not configured in this build. No payment is collected and no purchase can be restored yet.")
-                        .font(.system(size: 13)).foregroundStyle(Color(0xA9BED3))
-                    Text("Go Premium · unavailable").font(.h(16, .bold)).foregroundStyle(Color(0x1B1300))
-                        .frame(maxWidth: .infinity).padding(.vertical, 17)
-                        .background(LinearGradient(colors: [Color(0xFBBF57), .amber], startPoint: .topLeading, endPoint: .bottomTrailing), in: .rect(cornerRadius: 15))
-                        .accessibilityLabel("Premium purchases unavailable")
-                    Button("Restore purchase") {}.disabled(true)
-                        .font(.system(size: 12.5)).foregroundStyle(Color(0xA9BED3)).frame(maxWidth: .infinity, minHeight: 44)
-                }.padding(.top, 52)
-            }.padding(.horizontal, 26).padding(.top, 10).padding(.bottom, 28)
+                VStack(alignment: .leading, spacing: 8) {
+                    if premiumStore.isPremium {
+                        Label("Premium is active", systemImage: "checkmark.seal.fill")
+                            .font(.h(18, .bold)).foregroundStyle(Color(0xFBBF57))
+                    } else {
+                        Text(verbatim: premiumStore.displayName)
+                            .font(.h(22, .bold)).foregroundStyle(.white)
+                        Text("One-time purchase. Payment will be charged to your Apple Account.")
+                            .font(.system(size: 13)).foregroundStyle(Color(0xA9BED3))
+                    }
+                }.padding(.top, 34)
+                }.padding(.horizontal, 26).padding(.top, 18).padding(.bottom, 20)
+            }
+            .safeAreaInset(edge: .bottom) { purchaseFooter }
         }
         .background {
             RadialGradient(colors: [Color(0x1C3350), Color(0x101D2E)], center: .top, startRadius: 0, endRadius: 620).ignoresSafeArea()
         }
         .preferredColorScheme(.dark)
+        .onAppear { Track.screen("paywall") }
+        .task { await premiumStore.prepare() }
+        .offerCodeRedemption(isPresented: $showRedeem) { result in
+            Track.log("premium_redeem_result", ["presented": (try? result.get()) != nil])
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await premiumStore.prepare() } }
+        }
+        .onChange(of: premiumStore.isPremium) { oldValue, isPremium in
+            if isPremium && !oldValue { dismiss() }
+        }
+    }
+
+    private var purchaseFooter: some View {
+        VStack(spacing: 12) {
+            if let message = premiumStore.message {
+                Text(verbatim: message).font(.system(size: 13)).foregroundStyle(Color(0xFBBF57))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Button {
+                guard !premiumStore.isPremium else { dismiss(); return }
+                Track.log("premium_purchase_start")
+                Task {
+                    await premiumStore.purchase()
+                    Track.log("premium_purchase_result", ["active": premiumStore.isPremium])
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if premiumStore.isPurchasing { ProgressView().tint(Color(0x1B1300)) }
+                    Text(purchaseButtonTitle).font(.h(16, .bold))
+                }
+                .foregroundStyle(Color(0x1B1300)).frame(maxWidth: .infinity).padding(.vertical, 17)
+                .background(LinearGradient(colors: [Color(0xFBBF57), .amber], startPoint: .topLeading, endPoint: .bottomTrailing), in: .rect(cornerRadius: 15))
+            }
+            .disabled(premiumStore.isBusy && !premiumStore.isPremium)
+
+            HStack(spacing: 10) {
+                Button {
+                    Track.log("premium_restore_start")
+                    Task {
+                        await premiumStore.restore()
+                        Track.log("premium_restore_result", ["active": premiumStore.isPremium])
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if premiumStore.isRestoring { ProgressView().tint(Color(0xE4ECF5)) }
+                        Text("Restore purchase")
+                    }
+                    .secondaryPaywallAction()
+                }
+                .disabled(premiumStore.isBusy || premiumStore.isPremium)
+
+                Button {
+                    Track.log("premium_redeem_open")
+                    showRedeem = true
+                } label: {
+                    Label("Redeem a code", systemImage: "gift")
+                        .labelStyle(.titleAndIcon)
+                        .secondaryPaywallAction()
+                }
+                .disabled(premiumStore.isPremium)
+            }
+        }
+        .padding(.horizontal, 26).padding(.top, 14).padding(.bottom, 10)
+        .background(Color(0x101D2E).opacity(0.97).ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1) }
+    }
+
+    private var purchaseButtonTitle: String {
+        if premiumStore.isPremium { return String(localized: "Continue") }
+        guard let price = premiumStore.displayPrice else { return String(localized: "Buy Premium") }
+        return "\(String(localized: "Buy Premium")) · \(price)"
     }
 
     private func benefit(_ text: LocalizedStringKey) -> some View {
@@ -51,6 +135,14 @@ struct GoProView: View {
                 .frame(width: 26, height: 26).background(Color(0xFBBF57).opacity(0.16), in: .rect(cornerRadius: 8))
             Text(text).font(.system(size: 14.5)).foregroundStyle(Color(0xE4ECF5))
         }
+    }
+}
+
+private extension View {
+    func secondaryPaywallAction() -> some View {
+        font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(0xE4ECF5))
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(Color.white.opacity(0.08), in: .rect(cornerRadius: 12))
     }
 }
 
@@ -73,8 +165,9 @@ struct PracticeExamView: View {
                 Spacer()
             }
             .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 14)
+            .pinnedHeader()
 
-            ScrollView {
+            ScrollView(.vertical) {
                 VStack(spacing: 16) {
                     hero
                     HStack(spacing: 10) {
@@ -88,10 +181,16 @@ struct PracticeExamView: View {
                             .font(.caption).foregroundStyle(Color.slate).padding(.horizontal, 4)
                     }
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
 
-            Button { path.append(.quiz("exam")) } label: {
+            Button {
+                Track.log("exam_start_tap", ["resume": viewModel.study.draft(for: "exam") != nil,
+                                             "question_count": askedCount, "is_demo": viewModel.study.bank.isDemo])
+                path.append(.quiz("exam"))
+            } label: {
                 Group {
                     if viewModel.study.draft(for: "exam") != nil { Text("Resume exam") }
                     else if viewModel.study.bank.isDemo { Text("Start demo exam") }
@@ -147,7 +246,7 @@ struct PracticeExamView: View {
             Text("What to expect").font(.h(14.5))
             row("clock", "\(viewModel.study.examMinutes):00 on the clock, like the real PSPO I — the exam auto-submits at zero.")
             row("square.grid.3x3", "Answer in any order: jump between questions and flag the ones to revisit.")
-            row("shuffle", "Every attempt draws a fresh form spread across the topics in your bank.")
+            row("shuffle", "Each new exam shuffles all unlocked multiple-choice questions and takes the first 80. Retakes keep the same form.")
             row("eye.slash", "No feedback during the exam; full explanations unlock the moment you submit.")
             row("target", "\(passMark) of \(askedCount) correct is the \(passPercent) pass mark. Unanswered counts as wrong.")
         }
@@ -160,6 +259,7 @@ struct PracticeExamView: View {
             Image(systemName: icon).font(.system(size: 15, weight: .medium)).foregroundStyle(Color.brand)
             Text(text).font(.system(size: 13)).foregroundStyle(Color.slate2)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
