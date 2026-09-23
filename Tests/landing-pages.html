@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing page layout checks</title>
+<style>
+  body { font: 16px system-ui; margin: 24px; }
+  iframe { display: block; height: 900px; border: 0; }
+  pre { white-space: pre-wrap; }
+</style>
+<h1>Running landing page layout checks…</h1>
+<p>Run <code>python3 -m http.server 8124 --bind 127.0.0.1</code> from the repository root, then open <code>http://127.0.0.1:8124/Tests/landing-pages.html</code>.</p>
+<pre id="results" aria-live="polite"></pre>
+<script type="module">
+  const output = document.querySelector('#results');
+  const frame = document.body.appendChild(document.createElement('iframe'));
+  frame.title = 'Landing page under test';
+  let passed = 0;
+  let failed = 0;
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  for (const page of ['marketing', 'support', 'privacy-policy']) {
+    for (const width of [320, 390, 680, 681, 768, 900, 901, 1024, 1440]) {
+      frame.style.width = `${width}px`;
+      await new Promise(resolve => {
+        frame.onload = resolve;
+        frame.src = `../docs/${page}/`;
+      });
+      const content = frame.contentDocument;
+      for (const language of ['en', 'vi']) {
+        try {
+          content.querySelector(`[data-language-button="${language}"]`).click();
+          await Promise.all([...content.images].map(image => {
+            image.loading = 'eager';
+            return image.decode();
+          }));
+          assert(content.documentElement.scrollWidth <= width, 'Page overflows horizontally');
+          for (const image of content.images) {
+            const expectedHeight = image.clientWidth * image.naturalHeight / image.naturalWidth;
+            assert(Math.abs(image.clientHeight - expectedHeight) < 1.5, `${image.alt}: distorted aspect ratio`);
+          }
+          if (page === 'marketing') {
+            const hero = content.querySelector('.hero').getBoundingClientRect();
+            const badge = content.querySelector('.stat-card').getBoundingClientRect();
+            for (const phone of content.querySelectorAll('.phone')) {
+              const bounds = phone.getBoundingClientRect();
+              assert(bounds.left >= 0 && bounds.right <= width, 'Phone clips horizontally');
+              assert(bounds.top >= hero.top && bounds.bottom <= hero.bottom, 'Phone clips vertically');
+              assert(bounds.bottom < badge.top, 'Stats badge overlaps phone');
+            }
+            for (const image of content.querySelectorAll('.phone img, .screenshot-card img')) {
+              assert(image.clientWidth <= 180 && image.clientHeight < 400, 'Screenshot is oversized');
+            }
+            const gallery = content.querySelector('.screenshots');
+            if (width <= 680) {
+              assert(gallery.tabIndex === 0 && gallery.getAttribute('aria-label'), 'Gallery is not keyboard accessible');
+              if (gallery.scrollWidth > gallery.clientWidth) {
+                gallery.scrollLeft = gallery.scrollWidth;
+                assert(gallery.scrollLeft > 0, 'Mobile gallery cannot reach last screenshot');
+              }
+            } else {
+              assert(gallery.scrollWidth <= gallery.clientWidth, 'Desktop gallery overflows');
+            }
+          }
+          passed++;
+          output.textContent += `PASS ${page} ${width}px ${language}\n`;
+        } catch (error) {
+          failed++;
+          output.textContent += `FAIL ${page} ${width}px ${language}: ${error.message}\n`;
+        }
+      }
+    }
+  }
+  frame.remove();
+  document.querySelector('h1').textContent = `${failed ? 'FAIL' : 'PASS'}: ${passed} passed, ${failed} failed`;
+</script>
+</html>

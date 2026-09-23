@@ -44,6 +44,7 @@ a {
 img {
   display: block;
   max-width: 100%;
+  height: auto;
 }
 
 .skip-link {
@@ -269,19 +270,20 @@ h1 {
 }
 
 .phone-stage {
-  position: relative;
-  min-height: 250px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+  width: min(378px, 100%);
+  margin-inline: auto;
 }
 
 .phone {
-  position: absolute;
-  width: 110px;
+  width: 100%;
   overflow: hidden;
   border: 4px solid #0b1725;
   border-radius: 26px;
   background: #0b1725;
-  max-width: 110px;
-  margin-inline: auto;
   box-shadow: var(--shadow);
 }
 
@@ -291,24 +293,18 @@ h1 {
 }
 
 .phone-primary {
-  top: 0;
-  right: 4%;
-  z-index: 2;
   transform: rotate(3deg);
 }
 
 .phone-secondary {
-  bottom: 0;
-  left: 6%;
+  margin-top: 32px;
   transform: rotate(-5deg);
 }
 
 .stat-card {
-  position: absolute;
-  right: 0;
-  bottom: 5px;
-  z-index: 3;
-  min-width: 100px;
+  grid-column: 1 / -1;
+  justify-self: center;
+  text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: 20px;
   padding: 12px 14px;
@@ -408,10 +404,10 @@ h1 {
 
 .screenshots {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: end;
-  gap: 12px;
-  max-width: 360px;
+  gap: 24px;
+  max-width: 588px;
   margin-inline: auto;
 }
 
@@ -421,6 +417,10 @@ h1 {
   border-radius: 20px;
   background: #0b1725;
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.28);
+}
+
+.screenshot-card img {
+  width: 100%;
 }
 
 .screenshot-card:nth-child(2) {
@@ -690,11 +690,6 @@ h1 {
     padding-top: 64px;
   }
 
-  .phone-stage {
-    width: 250px;
-    margin-inline: auto;
-  }
-
   .feature-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -740,34 +735,34 @@ h1 {
   }
 
   .phone-stage {
-    min-height: 220px;
+    width: min(320px, 100% - 24px);
   }
 
   .phone {
-    width: 100px;
     border-width: 3px;
-    border-radius: 18px;
+    border-radius: 20px;
   }
 
   .phone img {
     border-radius: 16px;
   }
 
-  .stat-card {
-    right: 0;
-    bottom: 45px;
-    min-width: 155px;
-    padding: 13px 15px;
-  }
-
-  .feature-grid,
-  .screenshots {
+  .feature-grid {
     grid-template-columns: 1fr;
   }
 
   .screenshots {
-    width: min(180px, 100%);
-    margin-inline: auto;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 180px;
+    gap: 16px;
+    overflow-x: auto;
+    padding: 8px 8px 24px;
+    scroll-snap-type: x proximity;
+  }
+
+  .screenshot-card {
+    scroll-snap-align: center;
   }
 
   .screenshot-card:nth-child(2) {
