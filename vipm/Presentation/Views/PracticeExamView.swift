@@ -8,6 +8,10 @@ struct GoProView: View {
     @State private var showRedeem = false
 
     var body: some View {
+        if AppFeatures.inAppPurchasesEnabled { paywall }
+    }
+
+    private var paywall: some View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
@@ -21,9 +25,9 @@ struct GoProView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: "star").font(.system(size: 34, weight: .medium)).foregroundStyle(Color(0x1B1300))
-                    .frame(width: 72, height: 72)
-                    .background(LinearGradient(colors: [Color(0xFBBF57), .amber], startPoint: .topLeading, endPoint: .bottomTrailing), in: .rect(cornerRadius: 20))
+                Image("PremiumProductIcon").resizable().scaledToFit()
+                    .frame(width: 72, height: 72).clipShape(.rect(cornerRadius: 20))
+                    .accessibilityHidden(true)
                     .shadow(color: Color.amber.opacity(0.25), radius: 17, y: 12)
                 Text("Unlock the full\nquestion bank").font(.h(28, .bold)).foregroundStyle(.white).padding(.top, 22)
                 Text("More ways to learn. One focused place to prepare for your next step.")

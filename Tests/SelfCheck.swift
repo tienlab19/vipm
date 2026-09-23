@@ -1,14 +1,47 @@
 import Foundation
 
+enum Track {
+    static func log(_ event: String, _ parameters: [String: Any] = [:]) {
+        fatalError("Disabled IAP must not emit StoreKit events: \(event)")
+    }
+}
+
 @main
 struct SelfCheck {
     @MainActor
-    static func main() throws {
+    static func main() async throws {
         let input = URL(fileURLWithPath: CommandLine.arguments[1])
         let bank = try JSONQuestionBankRepository(url: input).load()
         assert(bank.isDemo && bank.parts.count == 1 && bank.parts[0].questions.count == 2)
         let appBank = try JSONQuestionBankRepository(url: URL(fileURLWithPath: CommandLine.arguments[2])).load()
         assert(!appBank.parts.isEmpty && !appBank.all.isEmpty, "The bundled question bank must decode.")
+        let freeApp = StudyUseCase(bank: appBank, progressRepository: MemoryProgressRepository(), isPremium: false)
+        let premiumApp = StudyUseCase(bank: appBank, progressRepository: MemoryProgressRepository(), isPremium: true)
+        assert(freeApp.unlockedQuestions.count == freeApp.freeQuestionLimit && freeApp.freeQuestionLimit == 30)
+        assert(premiumApp.unlockedQuestions.count == appBank.all.count && appBank.all.count == 800)
+        if !AppFeatures.inAppPurchasesEnabled {
+            let store = PremiumStore()
+            await store.prepare()
+            await store.purchase()
+            await store.restore()
+            assert(!store.isPremium, "Full access must not fabricate a StoreKit entitlement.")
+            assert(!store.isBusy && store.displayPrice == nil && store.message == nil)
+            let launchModel = StudyViewModel(bankRepository: FixtureBankRepository(bank: appBank),
+                                            progressRepository: MemoryProgressRepository(),
+                                            isPremium: !AppFeatures.inAppPurchasesEnabled)
+            assert(launchModel.study.unlockedQuestions.count == 800)
+            for part in appBank.parts {
+                assert(launchModel.session(for: part.id)?.session.questions.count == part.questions.count)
+            }
+            assert(launchModel.session(for: "exam")?.session.questions.count == 80)
+            for count in launchModel.study.flashCounts {
+                assert(launchModel.session(for: "flash-\(count)")?.session.questions.count == count)
+            }
+            guard let trial = launchModel.session(for: "timetrial") else { fatalError("Time Trial is locked") }
+            assert(trial.session.questions.count == launchModel.study.timeTrialCount)
+            assert(launchModel.retake(trial) != nil)
+            assert(launchModel.study.draft(for: "timetrial") != nil)
+        }
         let single = bank.parts[0].questions[0]
         let multi = bank.parts[0].questions[1]
         assert(single.correct == [2] && multi.correct == [1, 3])
@@ -29,6 +62,10 @@ struct SelfCheck {
         assert(session.index == 1)
         session.move(by: -99)
         assert(session.index == 0)
+        session.toggle(99, on: single)
+        assert(session.picks[single.id] == [2], "Unknown answer IDs are ignored.")
+        session.toggle(2, on: single)
+        assert(session.picks[single.id]?.isEmpty == true, "Single-choice answers can be deselected.")
 
         let sparse = try decodeQuestion([
             "question": "<p>Pick the eighth answer.</p>", "answer_1": "No", "answer_8": "Yes",
@@ -63,20 +100,30 @@ struct SelfCheck {
         essay.id = "essay"
         var mixed = QuizSession(questions: [single, essay], title: "Self-review")
         mixed.toggle(2, on: single)
-        mixed.draft.essays[essay.id] = "My response"
+        mixed.updateEssay("   ", for: essay)
+        assert(!mixed.isAnswered(essay), "Whitespace is not an essay response.")
+        mixed.updateEssay("My response", for: essay)
         assert(mixed.gradedQuestions.count == 1 && mixed.score == 1 && !mixed.isCorrect(essay))
+        mixed.move(by: 1)
+        mixed.checkAnswer()
+        mixed.updateEssay("Changed", for: essay)
+        assert(mixed.draft.essays[essay.id] == "My response", "Checked essays stay locked.")
         let empty = QuizSession(questions: [], title: "Empty")
         assert(empty.score == 0 && empty.current == nil && empty.progress == 0)
 
         let start = Date(timeIntervalSince1970: 1_000)
         var timed = QuizSession(questions: [single, multi], title: "Timed", minutes: 1, startedAt: start)
         assert(timed.remaining(at: start) == 60)
+        assert(timed.remaining(at: start.addingTimeInterval(59.1)) == 1)
         assert(timed.remaining(at: start.addingTimeInterval(61)) == 0)
         timed.finish(at: start.addingTimeInterval(120))
         assert(timed.elapsed == 60 && timed.finished && timed.missedCount == 2)
         timed.finish(at: start.addingTimeInterval(200))
         timed.toggle(2, on: single)
+        timed.jump(to: 1)
+        timed.toggleFlag(single)
         assert(timed.elapsed == 60 && timed.picks.isEmpty)
+        assert(timed.index == 0 && timed.flags.isEmpty, "Finished sessions are immutable.")
 
         let export: [String: Any] = [
             "config": ["module_title": "Export", "updated_time": "Fixture"],
@@ -96,7 +143,10 @@ struct SelfCheck {
         practice.toggle(2, on: single)
         assert(memory.progress.drafts["examples"]?.picks[single.id] == [2], "ViewModel actions save without a View lifecycle.")
         viewModel.toggleBookmark(single)
-        let restored = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: memory, isPremium: false)
+        assert(memory.progress.bookmarks.isEmpty, "Bookmarks are Premium-only.")
+        viewModel.setPremium(true)
+        viewModel.toggleBookmark(single)
+        let restored = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: memory, isPremium: true)
         guard let resumed = restored.session(for: "examples") else { fatalError("Cannot resume") }
         assert(resumed.session.picks[single.id] == [2] && restored.study.bookmarks.contains(single.id))
         restored.finish(resumed)
@@ -104,7 +154,7 @@ struct SelfCheck {
         assert(restored.study.completedAttempts == 1 && restored.study.latestDraft == nil)
         restored.finish(resumed)
         assert(restored.study.completedAttempts == 1, "Submit must be idempotent.")
-        let retry = restored.retake(resumed)
+        guard let retry = restored.retake(resumed) else { fatalError("Cannot retake free practice") }
         assert(retry.session.draft.id != resumed.session.draft.id && retry.session.picks.isEmpty && !retry.session.finished)
         assert(memory.progress.drafts["examples"]?.id == retry.session.draft.id)
         let immutableResult = resumed.session
@@ -115,6 +165,24 @@ struct SelfCheck {
         retry.toggle(2, on: single)
         assert(retry.session.picks[single.id] == [1], "Checked answers stay locked.")
 
+        var firstQuestion = single
+        firstQuestion.id = "first/q1"
+        var secondQuestion = single
+        secondQuestion.id = "second/q1"
+        let scoredBank = QuestionBank(title: "Scored", updatedTime: "", parts: [
+            Part(id: "first", name: "First", isPremium: false, questions: [firstQuestion]),
+            Part(id: "second", name: "Second", isPremium: false, questions: [secondQuestion])
+        ], isDemo: false)
+        var scoredUseCase = StudyUseCase(bank: scoredBank, progressRepository: MemoryProgressRepository(), isPremium: false)
+        var scoredSession = QuizSession(questions: [firstQuestion, secondQuestion], title: "Scored")
+        scoredSession.toggle(2, on: firstQuestion)
+        scoredSession.toggle(1, on: secondQuestion)
+        scoredUseCase.finish(&scoredSession)
+        let breakdown = scoredUseCase.breakdown(for: scoredSession)
+        assert(scoredUseCase.readiness == 0.5 && scoredUseCase.bestScore == 0.5)
+        assert(breakdown.count == 2 && breakdown[0].value == 1 && breakdown[1].value == 0)
+        assert(scoredUseCase.questions(with: [secondQuestion.id, firstQuestion.id]).map(\.id) == [firstQuestion.id, secondQuestion.id])
+
         let timeoutMemory = MemoryProgressRepository()
         let timeoutModel = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: timeoutMemory, isPremium: false)
         guard let exam = timeoutModel.session(for: "exam"), let deadline = exam.session.deadline else { fatalError("Cannot start exam") }
@@ -122,6 +190,21 @@ struct SelfCheck {
         assert(exam.session.finished && exam.session.elapsed == 3_600 && timeoutModel.study.completedAttempts == 1)
         timeoutModel.updateTime(deadline.addingTimeInterval(30), for: exam)
         assert(timeoutModel.study.completedAttempts == 1)
+        assert(timeoutModel.session(for: "flash-10") == nil)
+        assert(timeoutModel.session(for: "timetrial") == nil)
+
+        let premiumModesProgress = MemoryProgressRepository()
+        premiumModesProgress.progress.bookmarks = [single.id]
+        premiumModesProgress.progress.wrong = [single.id]
+        var premiumModes = StudyUseCase(bank: bank, progressRepository: premiumModesProgress, isPremium: false)
+        assert(premiumModes.bookmarks.isEmpty)
+        assert(premiumModes.session(for: "bookmarks") == nil && premiumModes.session(for: "wrong") == nil)
+        premiumModes.setPremium(true)
+        assert(premiumModes.session(for: "bookmarks") != nil && premiumModes.session(for: "wrong") != nil)
+        assert(premiumModes.session(for: "flash-10") != nil && premiumModes.session(for: "timetrial") != nil)
+        guard let flash = premiumModes.session(for: "flash-10") else { fatalError("Cannot start Premium flash") }
+        premiumModes.setPremium(false)
+        assert(premiumModes.retake(flash) == nil, "Premium modes must re-check entitlement before retake.")
 
         var locked = StudyUseCase(bank: exportBank, progressRepository: MemoryProgressRepository(), isPremium: false)
         var unlocked = StudyUseCase(bank: exportBank, progressRepository: MemoryProgressRepository(), isPremium: true)
@@ -131,6 +214,26 @@ struct SelfCheck {
         assert(locked.unlockedQuestions.count == 1 && locked.session(for: "part") != nil)
         locked.setPremium(false)
         assert(locked.unlockedQuestions.isEmpty, "Revoked Premium access locks paid questions again.")
+
+        let quotaBank = QuestionBank(title: "Quota", updatedTime: "", parts: [
+            Part(id: "free", name: "Free", isPremium: false, questions: (1...35).map { number in
+                var question = single
+                question.id = "free/\(number)"
+                return question
+            }),
+            Part(id: "premium", name: "Premium", isPremium: true, questions: (1...5).map { number in
+                var question = single
+                question.id = "premium/\(number)"
+                return question
+            })
+        ], isDemo: false)
+        var quota = StudyUseCase(bank: quotaBank, progressRepository: MemoryProgressRepository(), isPremium: false)
+        assert(quota.unlockedQuestions.count == 30)
+        assert(quota.session(for: "free")?.questions.count == 30 && quota.session(for: "premium") == nil)
+        quota.setPremium(true)
+        guard let paidSession = quota.session(for: "premium") else { fatalError("Cannot start Premium practice") }
+        quota.setPremium(false)
+        assert(quota.retake(paidSession) == nil, "Retake must re-check the current Premium entitlement.")
 
         let suite = "vipm.selfcheck.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suite) else { fatalError("Test defaults unavailable") }
@@ -150,7 +253,9 @@ struct SelfCheck {
         guard let legacyQuiz = legacyModel.session(for: "examples") else { fatalError("Legacy draft lost") }
         assert(legacyModel.study.learnerName == "Existing learner" && legacyModel.study.completedAttempts == 4)
         assert(legacyQuiz.session.index == 1 && legacyQuiz.session.draft.checked == [single.id])
-        assert(legacyQuiz.session.picks[single.id] == [2] && legacyModel.study.bookmarks == [single.id])
+        assert(legacyQuiz.session.picks[single.id] == [2] && legacyModel.study.bookmarks.isEmpty)
+        legacyModel.setPremium(true)
+        assert(legacyModel.study.bookmarks == [single.id], "Stored bookmarks reappear after Premium is restored.")
         legacyQuiz.toggle(1, on: multi)
         let persisted = try repository.load()
         assert(persisted.drafts["examples"]?.picks[multi.id] == [1] && persisted.bestScore == 0.5)
@@ -165,24 +270,64 @@ struct SelfCheck {
         assert(examProfile.learnerName == "Exam candidate")
         assert(examProfile.plannedExamDate == Calendar.current.startOfDay(for: examDate))
 
+        let scheduler = SpyExamReminderScheduler()
+        let profileMemory = MemoryProgressRepository()
+        let profileModel = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: profileMemory,
+                                          isPremium: false, reminderScheduler: scheduler)
+        profileModel.updateExamProfile(name: String(repeating: "A", count: 80), plannedExamDate: examDate)
+        assert(profileModel.study.learnerName.count == 60)
+        assert(profileMemory.progress.plannedExamDate == Calendar.current.startOfDay(for: examDate))
+        assert(scheduler.examDates == [examDate], "Saving the exam plan schedules reminders.")
+
+        let invalidDrafts = MemoryProgressRepository()
+        invalidDrafts.progress.drafts = [
+            "empty": QuizDraft(key: "empty", title: "Empty", questionIDs: [], startedAt: start, deadline: nil),
+            "duplicate": QuizDraft(key: "duplicate", title: "Duplicate", questionIDs: [single.id, single.id], startedAt: start, deadline: nil),
+            "topics": QuizDraft(key: "topics", title: "Old route", questionIDs: [single.id], startedAt: start, deadline: nil)
+        ]
+        invalidDrafts.progress.drafts["invalid-index"] = QuizDraft(
+            key: "invalid-index", title: "Invalid index", questionIDs: [single.id], startedAt: start, deadline: nil, index: 2
+        )
+        let draftValidator = StudyUseCase(bank: bank, progressRepository: invalidDrafts, isPremium: true)
+        assert(draftValidator.draft(for: "empty") == nil)
+        assert(draftValidator.draft(for: "duplicate") == nil)
+        assert(draftValidator.draft(for: "topics") == nil)
+        assert(draftValidator.draft(for: "invalid-index") == nil)
+
         for localFlag in [false, true] {
             defaults.set(localFlag, forKey: "premium")
             let composed = makeStudyViewModel(defaults: defaults)
             assert(composed.bankError == nil && composed.study.bank.all.count == 2)
-            assert(!composed.study.isPremium, "Premium stays locked until StoreKit verifies an entitlement.")
+            assert(composed.study.isPremium == !AppFeatures.inAppPurchasesEnabled,
+                   "Launch access follows the release policy, never a saved Premium flag.")
+            if !AppFeatures.inAppPurchasesEnabled {
+                assert(composed.study.unlockedQuestions.count == composed.study.bank.all.count)
+                assert(composed.session(for: "exam") != nil)
+                for count in composed.study.flashCounts {
+                    assert(composed.session(for: "flash-\(count)") != nil)
+                }
+                assert(composed.session(for: "timetrial") != nil)
+                if !composed.study.bookmarks.contains(single.id) { composed.toggleBookmark(single) }
+                assert(composed.session(for: "bookmarks") != nil)
+            }
         }
         let corrupt = Data("broken".utf8)
         defaults.set(corrupt, forKey: "studyProgress.v1")
-        let recovery = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: repository, isPremium: false)
+        let recovery = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: repository, isPremium: true)
         recovery.toggleBookmark(single)
         assert(recovery.persistenceError != nil && defaults.data(forKey: "studyProgress.v1") == corrupt)
 
         let failing = MemoryProgressRepository()
         failing.failSaves = true
-        let failingModel = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: failing, isPremium: false)
+        let failingModel = StudyViewModel(bankRepository: FixtureBankRepository(bank: bank), progressRepository: failing, isPremium: true)
         failingModel.toggleBookmark(single)
         assert(failingModel.persistenceError != nil && failing.progress.bookmarks.isEmpty)
         assert(failingModel.study.bookmarks.contains(single.id), "Save errors keep in-memory progress available.")
+        let unreadable = MemoryProgressRepository()
+        unreadable.failLoads = true
+        var unreadableUseCase = StudyUseCase(bank: bank, progressRepository: unreadable, isPremium: true)
+        unreadableUseCase.updateLearnerName("Not persisted")
+        assert(unreadableUseCase.persistenceError != nil && unreadable.progress.learnerName == nil)
         let big = QuestionBank(title: "Exam", updatedTime: "", parts: (1...4).map { part in
             Part(id: "p\(part)", name: "Focus \(part)", isPremium: false, questions: (1...(part * 40)).map { number in
                 var question = single
@@ -190,7 +335,7 @@ struct SelfCheck {
                 return question
             })
         }, isDemo: false)
-        var examUse = StudyUseCase(bank: big, progressRepository: MemoryProgressRepository(), isPremium: false)
+        var examUse = StudyUseCase(bank: big, progressRepository: MemoryProgressRepository(), isPremium: true)
         let form = examUse.examForm()
         assert(form.count == examUse.examCount && Set(form.map(\.id)).count == form.count, "A form is 80 distinct questions.")
         assert(Set(form.map(\.id)).isSubset(of: Set(examUse.examQuestions.map(\.id))), "A form only uses the unlocked global pool.")
@@ -209,13 +354,13 @@ struct SelfCheck {
         assert(resumedExam.index == 41 && resumedExam.answeredCount == 1, "Position and answers survive a resume.")
         examUse.finish(&examSession)
         assert(examSession.missedCount == 79 && examSession.score < examUse.passBar)
-        let retakenExam = examUse.retake(examSession)
+        guard let retakenExam = examUse.retake(examSession) else { fatalError("Cannot retake exam") }
         assert(retakenExam.questions.map(\.id) == examSession.questions.map(\.id), "Retaking an exam keeps the same form and order.")
         assert(retakenExam.deadline != nil && retakenExam.picks.isEmpty, "Retaking resets answers and the 60-minute timer.")
 
         let missing = StudyViewModel(bankRepository: JSONQuestionBankRepository(url: nil), progressRepository: MemoryProgressRepository(), isPremium: false)
         assert(missing.bankError != nil && missing.study.bank.all.isEmpty && missing.session(for: "exam") == nil)
-        print("PASS: exam form, flags, navigator state, parsing, domain scoring, premium gates, view models, resume, retake, deadline, legacy persistence, dependency injection")
+        print("PASS: parsing, scoring, essays, drafts, persistence, reminders, premium gates, practice modes, exam, resume, retake, timeout, view models, dependency injection")
     }
 
     static func decodeQuestion(_ fields: [String: Any]) throws -> Question {
@@ -230,11 +375,20 @@ private struct FixtureBankRepository: QuestionBankRepository {
 
 private final class MemoryProgressRepository: StudyProgressRepository {
     var progress = StudyProgress()
+    var failLoads = false
     var failSaves = false
 
-    func load() throws -> StudyProgress { progress }
+    func load() throws -> StudyProgress {
+        if failLoads { throw CocoaError(.fileReadCorruptFile) }
+        return progress
+    }
     func save(_ progress: StudyProgress) throws {
         if failSaves { throw CocoaError(.fileWriteUnknown) }
         self.progress = progress
     }
+}
+
+private final class SpyExamReminderScheduler: ExamReminderScheduling {
+    private(set) var examDates: [Date] = []
+    func schedule(for examDate: Date) { examDates.append(examDate) }
 }

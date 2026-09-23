@@ -8,3 +8,10 @@ xcuserdata/
 # Reverse-engineered third-party APK artifacts (not app source)
 pspo1_extracted/
 pspo1_extracted_*.zip
+
+*.orig
+*.rej
+/patch.diff
+/patch_home.diff
+/vipm/Debug/MarketingCapture.swift.patch
+/paywall_screenshot.png

@@ -10,26 +10,34 @@ import FirebaseCore
 
 @main
 struct vipmApp: App {
-    @State private var viewModel = makeStudyViewModel(reminderScheduler: LocalExamReminderScheduler())
+    @State private var viewModel = MarketingCapture.studyViewModel(reminderScheduler: LocalExamReminderScheduler())
     @State private var premiumStore = PremiumStore()
-    @AppStorage("appLanguage") private var language = AppLanguage.system
+    @AppStorage("appLanguage") private var language = AppLanguage.defaultValue
 
     init() {
-        FirebaseApp.configure()
-        Track.log("app_open")
+        if !MarketingCapture.isActive {
+            FirebaseApp.configure()
+            Track.log("app_open")
+        }
     }
 
     var body: some Scene {
         WindowGroup {
             HomeView().environment(viewModel)
                 .environment(premiumStore)
-                .environment(\.locale, language.locale ?? Locale.autoupdatingCurrent)
+                .environment(\.locale, MarketingCapture.isActive ? Locale(identifier: "en") : language.locale)
                 .task {
-                    await premiumStore.prepare()
-                    viewModel.setPremium(premiumStore.isPremium)
+                    if MarketingCapture.isActive {
+                        viewModel.setPremium(true)
+                    } else if AppFeatures.inAppPurchasesEnabled {
+                        await premiumStore.prepare()
+                        viewModel.setPremium(premiumStore.isPremium)
+                    }
                 }
                 .onChange(of: premiumStore.isPremium) { _, isPremium in
-                    viewModel.setPremium(isPremium)
+                    if AppFeatures.inAppPurchasesEnabled && !MarketingCapture.isActive {
+                        viewModel.setPremium(isPremium)
+                    }
                 }
         }
     }

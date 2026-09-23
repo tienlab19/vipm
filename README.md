@@ -4,12 +4,14 @@
 
 ## Chạy
 
-Mở `vipm.xcodeproj`, chọn scheme `vipm`, chạy trên iOS Simulator. Project hiện yêu cầu iOS 26.2+, theo cấu hình Xcode ban đầu.
+Mở `vipm.xcodeproj`, chọn scheme `vipm`, chạy trên iOS Simulator. Project yêu cầu iOS 17.0+ và được build bằng Xcode 26.3 / iOS 26.2 SDK.
 
 ```bash
 xcodebuild -project vipm.xcodeproj -scheme vipm -destination 'generic/platform=iOS Simulator' build
 bash Tests/run.sh
 ```
+
+Danh sách test case tự động, smoke test và checklist phát hành: `Tests/TEST_CASES.md`.
 
 ## Dữ liệu
 
@@ -27,13 +29,15 @@ Không gọi Firebase của ứng dụng nguồn, không tải câu hỏi thật
 - Kết quả tính từ đáp án cuối; ngưỡng luyện tập 85%, phân biệt sai/bỏ qua; review, làm lại.
 - Câu tự luận tự đối chiếu đáp án mẫu, không tính vào điểm trắc nghiệm.
 - Lưu nhiều phiên chưa nộp theo chế độ, bookmark, câu sai/bỏ qua và thống kê bằng UserDefaults. Không đồng bộ cloud.
-- Premium là IAP non-consumable trọn đời qua StoreKit 2. App chỉ mở khóa sau khi `Transaction.currentEntitlements` trả về giao dịch đã xác minh; hỗ trợ mua, khôi phục, pending approval và thu hồi entitlement.
+- Bản phát hành đầu tiên `1.0.0 (5)` mở miễn phí toàn bộ 800 câu và mọi chế độ: Exam, Flash Challenge, Bookmarks, Incorrect, Missed và Time Trial; không giới hạn 30 câu.
+- Không hiển thị paywall, mua, khôi phục hoặc đổi mã. StoreKit không tải sản phẩm, theo dõi giao dịch hay kiểm tra entitlement khi IAP đang tắt.
 
 ## In-App Purchase
 
-- Product ID: `com.viuniverse.pspo.one.premium`.
-- `vipm/Premium.storekit` đã gắn vào scheme để mua/restore local trong Xcode; dữ liệu test dùng giá `US$7.99`, không thu tiền thật.
-- Trước khi phát hành, tạo non-consumable có đúng Product ID trên App Store Connect, hoàn tất Paid Apps Agreement, banking/tax và gắn IAP vào version app.
+- `AppFeatures.inAppPurchasesEnabled = false` trong `vipm/App/AppComposition.swift` áp dụng cho cả Debug và Release, không phụ thuộc tài khoản hoặc cờ lưu trên thiết bị.
+- Giữ code StoreKit để dùng sau; bản đầu không gắn sản phẩm IAP vào submission. Metadata và review notes nằm trong `AppStore/`.
+- Khi phát hành bản mới có IAP: đổi cờ thành `true`, bật capability In-App Purchase, gắn lại `vipm/Premium.storekit` vào Run scheme để test và cấu hình non-consumable `com.viuniverse.pspo.one.premium` trên App Store Connect. Kiểm thử mua/restore/revoke trước khi gửi bản mới duyệt.
+- Khi IAP bật, quyền miễn phí giới hạn 30 câu; toàn bộ ngân hàng và các chế độ Premium chỉ mở với entitlement đã xác minh. Các kiểm tra Domain cho chế độ này vẫn được giữ.
 - StoreKit 2 xác minh JWS trên thiết bị. Nếu cần cấp quyền đa nền tảng, quản trị refund tập trung hoặc chống chia sẻ tài khoản, bổ sung App Store Server API phía backend.
 
 ## Analytics
@@ -96,4 +100,4 @@ Không mô phỏng: câu hỏi thật của Scrum.org, ngân hàng 80 câu chu�
 
 ## Kiểm tra
 
-`Tests/run.sh` biên dịch Domain độc lập, chạy assert cả có/không có `DEBUG`, không cần Simulator hoặc test framework. Repository in-memory kiểm tra use case và ViewModel không phụ thuộc UserDefaults. Bao phủ schema/export, input lỗi, đáp án đến số 8, ảnh, nhiều đáp án, tự luận, chấm điểm, timeout, lưu/khôi phục phiên cũ, bookmark, làm lại, lỗi lưu trữ, chuyển tên cũ; xác nhận Premium chỉ mở khi entitlement thay đổi.
+`Tests/run.sh` biên dịch Domain độc lập, chạy assert cả có/không có `DEBUG`, không cần Simulator hoặc test framework. Repository in-memory kiểm tra use case và ViewModel không phụ thuộc UserDefaults. Bao phủ schema/export, input lỗi, đáp án đến số 8, ảnh, nhiều đáp án, tự luận, chấm điểm, timeout, lưu/khôi phục phiên cũ, bookmark, làm lại, lỗi lưu trữ, chuyển tên cũ; kiểm tra quyền truy cập theo cấu hình phát hành và giữ các regression test entitlement cho IAP sau này.

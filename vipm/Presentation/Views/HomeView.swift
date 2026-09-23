@@ -45,11 +45,23 @@ struct HomeView: View {
     @State private var showPaywall = false
     @State private var editName = false
     @State private var draftName = ""
-    @AppStorage("appLanguage") private var language = AppLanguage.system
+    @AppStorage("appLanguage") private var language = AppLanguage.defaultValue
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @State private var showTour = false
     @State private var showInitialProfileSetup = false
     @State private var showExamPlanEditor = false
+
+    init() {
+        let initialTab: MainTab = switch MarketingCapture.screen {
+        case .practice: .questionBank
+        case .exam: .exam
+        case .profile: .profile
+        case .paywall: .profile
+        default: .home
+        }
+        _tab = State(initialValue: initialTab)
+        _path = State(initialValue: MarketingCapture.initialRoute)
+    }
     
     var body: some View {
         NavigationStack(path: $path) {
@@ -97,7 +109,7 @@ struct HomeView: View {
                 hasSeenTour = true
                 Track.log("tour_finish")
             }
-            .environment(\.locale, language.locale ?? Locale.autoupdatingCurrent)
+            .environment(\.locale, language.locale)
         }
         .fullScreenCover(isPresented: $showInitialProfileSetup) {
             ExamProfileSetupView(name: viewModel.study.learnerName,
@@ -117,6 +129,7 @@ struct HomeView: View {
             }
         }
         .task {
+            guard !MarketingCapture.isActive else { return }
             if !hasSeenTour { showTour = true; Track.log("tour_start") }
             else if viewModel.study.plannedExamDate == nil { showInitialProfileSetup = true }
         }
@@ -149,14 +162,14 @@ struct HomeView: View {
                             modeCard("arrow.counterclockwise", "Missed Questions", .red, Color(0xFFF1F1),
                                      "Review \(viewModel.study.missed.count) you skipped", .quiz("missed"))
                             modeCard("exclamationmark.triangle", "Incorrect", .amber, Color(0xFFF6E8),
-                                     "Fix \(viewModel.study.wrong.count) wrong answers", .quiz("wrong"))
+                                     "Fix \(viewModel.study.wrong.count) wrong answers", .quiz("wrong"), premium: true)
                             modeCard("bookmark", "Bookmarks", .green, Color(0xEAF7F1),
-                                     "\(viewModel.study.bookmarks.count) saved questions", .quiz("bookmarks"))
+                                     "\(viewModel.study.bookmarks.count) saved questions", .quiz("bookmarks"), premium: true)
                         }
                         Text("Quick practice").font(.h(16)).padding(.top, 22)
                         VStack(spacing: 12) {
-                            practiceRow("bolt.fill", "Flash Challenge", "Quick packs of 10, 20 or 30 questions", .amber, .flashChallenge)
-                            practiceRow("timer", "Time Trial", "Beat the clock — \(viewModel.study.timeTrialCount) questions", .red, .quiz("timetrial"))
+                            practiceRow("bolt.fill", "Flash Challenge", "Quick packs of 10, 20 or 30 questions", .amber, .flashChallenge, premium: true)
+                            practiceRow("timer", "Time Trial", "Beat the clock — \(viewModel.study.timeTrialCount) questions", .red, .quiz("timetrial"), premium: true)
                         }.padding(.top, 12)
                         if viewModel.study.bank.isDemo {
                             Label("Demo data · 2 illustrative questions, not an official exam bank.", systemImage: "info.circle")
@@ -260,7 +273,7 @@ struct HomeView: View {
                         } label: {
                             HStack(spacing: 14) {
                                 IconChip(systemName: locked ? "lock.fill" : "doc.text.fill",
-                                         tint: part.isPremium ? .amber : .brand)
+                                         tint: locked ? .amber : .brand)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(part.name).font(.h(15.5))
                                     Text("\(part.questions.count) questions").font(.caption).foregroundStyle(Color.slate)
@@ -426,7 +439,14 @@ struct HomeView: View {
     private var bottomNav: some View {
         HStack(spacing: 0) {
             ForEach(MainTab.allCases, id: \.self) { item in
-                Button { tab = item } label: {
+                Button {
+                    if item == .saved && !viewModel.study.isPremium {
+                        showPaywall = true
+                        Track.log("paywall_open", ["source": "saved_tab"])
+                    } else {
+                        tab = item
+                    }
+                } label: {
                     VStack(spacing: 5) {
                         Image(systemName: item.icon).font(.system(size: 21, weight: tab == item ? .semibold : .regular))
                         Text(item.title).font(.system(size: 10.5, weight: tab == item ? .semibold : .regular))
@@ -457,8 +477,17 @@ struct HomeView: View {
             .padding(.horizontal, 9).padding(.vertical, 4).background(Color(0x23405C), in: .rect(cornerRadius: 7))
     }
     
-    private func practiceRow(_ icon: String, _ title: LocalizedStringKey, _ subtitle: LocalizedStringKey, _ tint: Color, _ route: Route) -> some View {
-        Button { path.append(route) } label: {
+    private func practiceRow(_ icon: String, _ title: LocalizedStringKey, _ subtitle: LocalizedStringKey, _ tint: Color,
+                             _ route: Route, premium: Bool = false) -> some View {
+        let locked = premium && !viewModel.study.isPremium
+        return Button {
+            if locked {
+                showPaywall = true
+                Track.log("paywall_open", ["source": "premium_mode"])
+            } else {
+                path.append(route)
+            }
+        } label: {
             HStack(spacing: 14) {
                 IconChip(systemName: icon, tint: tint)
                 VStack(alignment: .leading, spacing: 3) {
@@ -466,16 +495,32 @@ struct HomeView: View {
                     Text(subtitle).font(.caption).foregroundStyle(Color.slate)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.slate)
+                Image(systemName: locked ? "lock.fill" : "chevron.right")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(locked ? Color.amber : Color.slate)
             }.foregroundStyle(Color.navy).card()
         }.buttonStyle(.plain)
     }
     
-    private func modeCard(_ icon: String, _ title: LocalizedStringKey, _ tint: Color, _ background: Color, _ subtitle: LocalizedStringKey, _ route: Route) -> some View {
-        Button { path.append(route) } label: {
+    private func modeCard(_ icon: String, _ title: LocalizedStringKey, _ tint: Color, _ background: Color,
+                          _ subtitle: LocalizedStringKey, _ route: Route, premium: Bool = false) -> some View {
+        let locked = premium && !viewModel.study.isPremium
+        return Button {
+            if locked {
+                showPaywall = true
+                Track.log("paywall_open", ["source": "premium_mode"])
+            } else {
+                path.append(route)
+            }
+        } label: {
             VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: icon).font(.system(size: 19, weight: .medium)).foregroundStyle(tint)
-                    .frame(width: 40, height: 40).background(background, in: .rect(cornerRadius: 11))
+                HStack {
+                    Image(systemName: icon).font(.system(size: 19, weight: .medium)).foregroundStyle(tint)
+                        .frame(width: 40, height: 40).background(background, in: .rect(cornerRadius: 11))
+                    Spacer()
+                    if locked {
+                        Text("PRO").font(.system(size: 10.5, weight: .bold)).foregroundStyle(Color.amber)
+                    }
+                }
                 Text(title).font(.h(14.5)).padding(.top, 12)
                 Text(subtitle).font(.system(size: 12)).foregroundStyle(Color.slate).padding(.top, 3)
             }.frame(maxWidth: .infinity, minHeight: 102, alignment: .topLeading).foregroundStyle(Color.navy).card(15, radius: 16)

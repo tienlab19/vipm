@@ -9,7 +9,7 @@ final class PremiumStore {
 
     private var product: Product?
     private(set) var isPremium = false
-    private(set) var isLoading = true
+    private(set) var isLoading = AppFeatures.inAppPurchasesEnabled
     private(set) var isPurchasing = false
     private(set) var isRestoring = false
     private(set) var message: String?
@@ -18,6 +18,7 @@ final class PremiumStore {
     private var updatesTask: Task<Void, Never>?
 
     init() {
+        guard AppFeatures.inAppPurchasesEnabled else { return }
         updatesTask = Task { [weak self] in
             for await result in Transaction.updates {
                 guard let self else { return }
@@ -31,6 +32,7 @@ final class PremiumStore {
     var displayPrice: String? { product?.displayPrice }
 
     func prepare() async {
+        guard AppFeatures.inAppPurchasesEnabled else { return }
         guard !isPrepared else {
             await refreshEntitlement()
             return
@@ -55,6 +57,7 @@ final class PremiumStore {
     }
 
     func purchase() async {
+        guard AppFeatures.inAppPurchasesEnabled else { return }
         guard !isPremium else { return }
         if product == nil { await prepare() }
         guard let product else {
@@ -86,6 +89,7 @@ final class PremiumStore {
     }
 
     func restore() async {
+        guard AppFeatures.inAppPurchasesEnabled else { return }
         isRestoring = true
         message = nil
         defer { isRestoring = false }

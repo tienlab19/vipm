@@ -27,6 +27,7 @@ struct QuizHost: View {
         .task {
             if !loaded {
                 quiz = viewModel.session(for: key)
+                if let quiz { MarketingCapture.prime(quiz) }
                 loaded = true
                 Track.log(quiz == nil ? "quiz_unavailable" : "quiz_start",
                           ["quiz_key": key, "question_count": quiz?.session.questions.count ?? 0])
@@ -47,6 +48,7 @@ struct QuizView: View {
     @State private var showExit = false
     @State private var showSubmit = false
     @State private var showNavigator = false
+    @State private var showPaywall = false
     private var isExam: Bool { session.deadline != nil }
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -73,28 +75,51 @@ struct QuizView: View {
             else { viewModel.saveDraft(quiz) }
         }
         .onDisappear { viewModel.saveDraft(quiz) }
-        .confirmationDialog("Leave this attempt?", isPresented: $showExit, titleVisibility: .visible) {
-            Button("Save and leave") {
-                Track.log("quiz_exit", ["index": session.index, "answered": session.answeredCount, "is_exam": isExam])
-                viewModel.saveDraft(quiz)
-                dismiss()
+        .overlay {
+            if showExit {
+                AppConfirmationDialog(
+                    title: "Leave this attempt?",
+                    message: session.deadline == nil
+                        ? Text("Your answers and position will be saved.")
+                        : Text("Your answers will be saved. The exam timer keeps running."),
+                    primaryTitle: "Save and leave",
+                    secondaryTitle: "Keep studying",
+                    primaryAction: {
+                        showExit = false
+                        Track.log("quiz_exit", ["index": session.index, "answered": session.answeredCount, "is_exam": isExam])
+                        viewModel.saveDraft(quiz)
+                        dismiss()
+                    },
+                    secondaryAction: { showExit = false }
+                ).transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else if showSubmit {
+                AppConfirmationDialog(
+                    title: "Submit this attempt?",
+                    message: Text("\(session.missedCount) unanswered. You can review explanations after submitting."),
+                    primaryTitle: "Submit answers",
+                    secondaryTitle: "Keep reviewing",
+                    primaryAction: {
+                        showSubmit = false
+                        viewModel.finish(quiz)
+                        Track.log("quiz_submit", ["is_exam": isExam, "score": Int((quiz.session.score * 100).rounded()),
+                                                  "correct": quiz.session.correctCount, "graded": quiz.session.gradedQuestions.count,
+                                                  "unanswered": quiz.session.missedCount, "elapsed_sec": Int(quiz.session.elapsed)])
+                    },
+                    secondaryAction: { showSubmit = false }
+                ).transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
-            Button("Keep studying", role: .cancel) {}
-        } message: {
-            session.deadline == nil ? Text("Your answers and position will be saved.") : Text("Your answers will be saved. The exam timer keeps running.")
         }
-        .confirmationDialog("Submit this attempt?", isPresented: $showSubmit, titleVisibility: .visible) {
-            Button("Submit answers") {
-                viewModel.finish(quiz)
-                Track.log("quiz_submit", ["is_exam": isExam, "score": Int((quiz.session.score * 100).rounded()),
-                                          "correct": quiz.session.correctCount, "graded": quiz.session.gradedQuestions.count,
-                                          "unanswered": quiz.session.missedCount, "elapsed_sec": Int(quiz.session.elapsed)])
-            }
-            Button("Keep reviewing", role: .cancel) {}
-        } message: { Text("\(session.missedCount) unanswered. You can review explanations after submitting.") }
+        .animation(.easeOut(duration: 0.18), value: showExit)
+        .animation(.easeOut(duration: 0.18), value: showSubmit)
         .onChange(of: showNavigator) { _, shown in if shown { Track.log("exam_navigator_open") } }
         .sheet(isPresented: $showNavigator) {
             ExamNavigator(session: session, jump: { quiz.jump(to: $0) }, submit: { showSubmit = true })
+        }
+        .sheet(isPresented: $showPaywall) { GoProView() }
+        .task {
+            guard MarketingCapture.isActive, MarketingCapture.screen == .navigator else { return }
+            try? await Task.sleep(for: .milliseconds(500))
+            showNavigator = true
         }
     }
 
@@ -143,13 +168,20 @@ struct QuizView: View {
                     .accessibilityLabel(session.flags.contains(question.id) ? Text("Remove flag for review") : Text("Flag for review"))
                 }
                 Button {
-                    viewModel.toggleBookmark(question)
-                    Track.log("bookmark_toggle", ["saved": viewModel.study.bookmarks.contains(question.id), "source": "quiz"])
+                    if viewModel.study.isPremium {
+                        viewModel.toggleBookmark(question)
+                        Track.log("bookmark_toggle", ["saved": viewModel.study.bookmarks.contains(question.id), "source": "quiz"])
+                    } else {
+                        showPaywall = true
+                        Track.log("paywall_open", ["source": "bookmark"])
+                    }
                 } label: {
                     Label {
                         viewModel.study.bookmarks.contains(question.id) ? Text("Saved") : Text("Save")
                     } icon: {
-                        Image(systemName: viewModel.study.bookmarks.contains(question.id) ? "bookmark.fill" : "bookmark")
+                        Image(systemName: viewModel.study.isPremium
+                              ? (viewModel.study.bookmarks.contains(question.id) ? "bookmark.fill" : "bookmark")
+                              : "lock.fill")
                     }
                         .font(.system(size: 12.5, weight: .medium)).frame(minHeight: 44)
                 }.accessibilityLabel(viewModel.study.bookmarks.contains(question.id) ? Text("Remove bookmark") : Text("Save question"))

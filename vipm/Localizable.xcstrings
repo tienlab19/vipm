@@ -727,16 +727,6 @@
         }
       }
     },
-    "Match device": {
-      "localizations": {
-        "vi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Theo thiết bị"
-          }
-        }
-      }
-    },
     "Minutes": {
       "localizations": {
         "vi": {

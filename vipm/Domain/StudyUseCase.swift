@@ -15,6 +15,7 @@ enum StudyPersistenceError: LocalizedError {
 struct StudyUseCase {
     let bank: QuestionBank
     private(set) var isPremium: Bool
+    let freeQuestionLimit = 30
     let passBar = 0.85
     let examCount = 80
     let examMinutes = 60
@@ -35,13 +36,17 @@ struct StudyUseCase {
 
     var learnerName: String { progress.learnerName ?? "Scrum learner" }
     var plannedExamDate: Date? { progress.plannedExamDate }
-    var bookmarks: Set<String> { progress.bookmarks.intersection(Set(bank.all.map(\.id))) }
-    var answered: Set<String> { progress.answered.intersection(Set(bank.all.map(\.id))) }
-    var wrong: Set<String> { progress.wrong.intersection(Set(bank.all.map(\.id))) }
-    var missed: Set<String> { progress.missed.intersection(Set(bank.all.map(\.id))) }
+    private var unlockedQuestionIDs: Set<String> { Set(unlockedQuestions.map(\.id)) }
+    var bookmarks: Set<String> { isPremium ? progress.bookmarks.intersection(unlockedQuestionIDs) : [] }
+    var answered: Set<String> { progress.answered.intersection(unlockedQuestionIDs) }
+    var wrong: Set<String> { progress.wrong.intersection(unlockedQuestionIDs) }
+    var missed: Set<String> { progress.missed.intersection(unlockedQuestionIDs) }
     var completedAttempts: Int { progress.completedAttempts }
     var bestScore: Double { progress.bestScore }
-    var unlockedQuestions: [Question] { bank.parts.filter { isPremium || !$0.isPremium }.flatMap(\.questions) }
+    var unlockedQuestions: [Question] {
+        if isPremium { return bank.all }
+        return Array(bank.parts.filter { !$0.isPremium }.flatMap(\.questions).prefix(freeQuestionLimit))
+    }
     var examQuestions: [Question] { unlockedQuestions.filter { !$0.isEssay } }
 
     /// PSPO I form: shuffle the full unlocked pool, then take up to 80 distinct questions.
@@ -70,6 +75,11 @@ struct StudyUseCase {
 
     func questions(with ids: Set<String>) -> [Question] { unlockedQuestions.filter { ids.contains($0.id) } }
 
+    func questions(in part: Part) -> [Question] {
+        let allowed = unlockedQuestionIDs
+        return part.questions.filter { allowed.contains($0.id) }
+    }
+
     mutating func setPremium(_ isPremium: Bool) { self.isPremium = isPremium }
 
     func breakdown(for session: QuizSession) -> [(name: String, value: Double)] {
@@ -94,12 +104,14 @@ struct StudyUseCase {
     }
 
     mutating func toggleBookmark(_ question: Question) {
+        guard isPremium, unlockedQuestionIDs.contains(question.id) else { return }
         if progress.bookmarks.contains(question.id) { progress.bookmarks.remove(question.id) }
         else { progress.bookmarks.insert(question.id) }
         persist()
     }
 
     mutating func session(for key: String) -> QuizSession? {
+        guard isPremium || !requiresPremium(key) else { return nil }
         if let draft = progress.drafts[key], isValid(draft) {
             let byID = Dictionary(uniqueKeysWithValues: unlockedQuestions.map { ($0.id, $0) })
             return QuizSession(questions: draft.questionIDs.compactMap { byID[$0] }, draft: draft)
@@ -116,8 +128,8 @@ struct StudyUseCase {
         case "bookmarks": questions = self.questions(with: bookmarks); title = "Bookmarks"; minutes = nil
         case "missed": questions = self.questions(with: missed); title = "Missed Questions"; minutes = nil
         default:
-            guard let part = bank.parts.first(where: { $0.id == key }), isPremium || !part.isPremium else { return nil }
-            questions = part.questions; title = part.name; minutes = nil
+            guard let part = bank.parts.first(where: { $0.id == key }) else { return nil }
+            questions = self.questions(in: part); title = part.name; minutes = nil
         }
         guard !questions.isEmpty else { return nil }
         let session = QuizSession(questions: questions, key: key, title: title, minutes: minutes)
@@ -125,16 +137,19 @@ struct StudyUseCase {
         return session
     }
 
-    mutating func retake(_ previous: QuizSession) -> QuizSession {
+    mutating func retake(_ previous: QuizSession) -> QuizSession? {
         let key = previous.draft.key
+        guard isPremium || !requiresPremium(key) else { return nil }
         let questions: [Question]
         let minutes: Int?
+        let allowed = unlockedQuestionIDs
         switch key {
-        case "exam": questions = previous.questions; minutes = examMinutes
+        case "exam": questions = previous.questions.filter { allowed.contains($0.id) }; minutes = examMinutes
         case "timetrial": questions = timeTrialForm(); minutes = timeTrialMinutes
         case let k where k.hasPrefix("flash-"): questions = flashForm(count: Int(k.dropFirst(6)) ?? flashCounts[0]); minutes = nil
-        default: questions = previous.questions; minutes = previous.deadline == nil ? nil : examMinutes
+        default: questions = previous.questions.filter { allowed.contains($0.id) }; minutes = previous.deadline == nil ? nil : examMinutes
         }
+        guard !questions.isEmpty else { return nil }
         let next = QuizSession(questions: questions, key: key, title: previous.title, minutes: minutes)
         saveDraft(next)
         return next
@@ -175,11 +190,15 @@ struct StudyUseCase {
     }
 
     private func isValid(_ draft: QuizDraft) -> Bool {
-        guard draft.key != "topics" else { return false }
+        guard draft.key != "topics", isPremium || !requiresPremium(draft.key) else { return false }
         let allowed = Set(unlockedQuestions.map(\.id))
         return !draft.questionIDs.isEmpty && draft.questionIDs.indices.contains(draft.index)
             && Set(draft.questionIDs).isSubset(of: allowed)
             && Set(draft.questionIDs).count == draft.questionIDs.count
+    }
+
+    private func requiresPremium(_ key: String) -> Bool {
+        key == "bookmarks" || key == "wrong" || key == "timetrial" || key.hasPrefix("flash-")
     }
 
     private mutating func persist() {

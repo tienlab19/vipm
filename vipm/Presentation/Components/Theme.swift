@@ -130,6 +130,43 @@ struct PrimaryButton: View {
     }
 }
 
+struct AppConfirmationDialog: View {
+    let title: LocalizedStringKey
+    let message: Text
+    let primaryTitle: LocalizedStringKey
+    let secondaryTitle: LocalizedStringKey
+    let primaryAction: () -> Void
+    let secondaryAction: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.navy.opacity(0.34).ignoresSafeArea().onTapGesture(perform: secondaryAction)
+            VStack(spacing: 18) {
+                IconChip(systemName: "exclamationmark.triangle.fill", tint: .amber, size: 52)
+                VStack(spacing: 8) {
+                    Text(title).font(.h(20)).foregroundStyle(Color.navy).multilineTextAlignment(.center)
+                    message.font(.system(size: 15)).foregroundStyle(Color.slate).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(spacing: 8) {
+                    PrimaryButton(title: primaryTitle, color: .navy, action: primaryAction)
+                    Button(action: secondaryAction) {
+                        Text(secondaryTitle).font(.h(14)).foregroundStyle(Color.brand)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }.buttonStyle(.plain)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 360)
+            .background(.white, in: .rect(cornerRadius: 24))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.hairline, lineWidth: 0.75))
+            .shadow(color: Color.navy.opacity(0.18), radius: 30, y: 16)
+            .padding(.horizontal, 24)
+            .accessibilityElement(children: .contain)
+        }
+    }
+}
+
 func mmss(_ seconds: Int) -> String {
     String(format: "%02d:%02d", max(0, seconds) / 60, max(0, seconds) % 60)
 }
