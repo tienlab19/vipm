@@ -29,15 +29,15 @@ Không gọi Firebase của ứng dụng nguồn, không tải câu hỏi thật
 - Kết quả tính từ đáp án cuối; ngưỡng luyện tập 85%, phân biệt sai/bỏ qua; review, làm lại.
 - Câu tự luận tự đối chiếu đáp án mẫu, không tính vào điểm trắc nghiệm.
 - Lưu nhiều phiên chưa nộp theo chế độ, bookmark, câu sai/bỏ qua và thống kê bằng UserDefaults. Không đồng bộ cloud.
-- Bản phát hành đầu tiên `1.0.0 (5)` mở miễn phí toàn bộ 800 câu và mọi chế độ: Exam, Flash Challenge, Bookmarks, Incorrect, Missed và Time Trial; không giới hạn 30 câu.
-- Không hiển thị paywall, mua, khôi phục hoặc đổi mã. StoreKit không tải sản phẩm, theo dõi giao dịch hay kiểm tra entitlement khi IAP đang tắt.
+- Người dùng miễn phí mở 30 câu; Premium mở toàn bộ 800 câu, các chế độ nâng cao và loại bỏ quảng cáo.
+- Paywall hỗ trợ mua trọn đời, khôi phục và đổi mã bằng StoreKit 2.
 
 ## In-App Purchase
 
-- `AppFeatures.inAppPurchasesEnabled = false` trong `vipm/App/AppComposition.swift` áp dụng cho cả Debug và Release, không phụ thuộc tài khoản hoặc cờ lưu trên thiết bị.
-- Giữ code StoreKit để dùng sau; bản đầu không gắn sản phẩm IAP vào submission. Metadata và review notes nằm trong `AppStore/`.
-- Khi phát hành bản mới có IAP: đổi cờ thành `true`, bật capability In-App Purchase, gắn lại `vipm/Premium.storekit` vào Run scheme để test và cấu hình non-consumable `com.viuniverse.pspo.one.premium` trên App Store Connect. Kiểm thử mua/restore/revoke trước khi gửi bản mới duyệt.
-- Khi IAP bật, quyền miễn phí giới hạn 30 câu; toàn bộ ngân hàng và các chế độ Premium chỉ mở với entitlement đã xác minh. Các kiểm tra Domain cho chế độ này vẫn được giữ.
+- `AppFeatures.inAppPurchasesEnabled = true`; capability In-App Purchase và `vipm/Premium.storekit` đã gắn vào Run scheme.
+- Sản phẩm non-consumable: `com.viuniverse.pspo.one.premium`.
+- Quyền miễn phí giới hạn 30 câu; toàn bộ ngân hàng, chế độ Premium và trải nghiệm không quảng cáo chỉ mở với entitlement đã xác minh.
+- App kiểm tra entitlement trước khi khởi tạo AdMob để người đã mua không thấy banner hoặc consent quảng cáo khi mở app.
 - StoreKit 2 xác minh JWS trên thiết bị. Nếu cần cấp quyền đa nền tảng, quản trị refund tập trung hoặc chống chia sẻ tài khoản, bổ sung App Store Server API phía backend.
 
 ## Analytics
@@ -68,8 +68,16 @@ SwiftUI dùng screen tracking thủ công với `screen_class = SwiftUIScreen`; 
 | `language_change` | `language` | profile |
 | `learner_name_update` | – | profile |
 | `bank_load_error` | – | `HomeView` |
+| `ad_banner_loaded` / `ad_banner_load_error` | – | banner Home |
+| `ad_consent_error` / `ad_privacy_options_error` | – | UMP consent |
 
 Không gửi tên người học, nội dung câu hỏi hay câu trả lời — chỉ số đếm, điểm và khóa màn hình.
+
+## AdMob
+
+- Tích hợp Google Mobile Ads và UMP; Debug chỉ dùng test ID của Google.
+- Banner adaptive chỉ hiện cho người dùng miễn phí tại root Home; Premium không khởi tạo hoặc hiển thị quảng cáo.
+- Release không request quảng cáo nếu `Info.plist` vẫn chứa test ID. Checklist thay ID và rollout: `docs/ADMOB_PLAN.md`.
 
 ## Clean Architecture
 
@@ -100,4 +108,4 @@ Không mô phỏng: câu hỏi thật của Scrum.org, ngân hàng 80 câu chu�
 
 ## Kiểm tra
 
-`Tests/run.sh` biên dịch Domain độc lập, chạy assert cả có/không có `DEBUG`, không cần Simulator hoặc test framework. Repository in-memory kiểm tra use case và ViewModel không phụ thuộc UserDefaults. Bao phủ schema/export, input lỗi, đáp án đến số 8, ảnh, nhiều đáp án, tự luận, chấm điểm, timeout, lưu/khôi phục phiên cũ, bookmark, làm lại, lỗi lưu trữ, chuyển tên cũ; kiểm tra quyền truy cập theo cấu hình phát hành và giữ các regression test entitlement cho IAP sau này.
+`Tests/run.sh` biên dịch Domain độc lập, chạy assert cả có/không có `DEBUG`, không cần Simulator hoặc test framework. Repository in-memory kiểm tra use case và ViewModel không phụ thuộc UserDefaults. Bao phủ schema/export, input lỗi, đáp án đến số 8, ảnh, nhiều đáp án, tự luận, chấm điểm, timeout, lưu/khôi phục phiên cũ, bookmark, làm lại, lỗi lưu trữ, chuyển tên cũ; kiểm tra Premium được bật và entitlement Premium luôn tắt quảng cáo.

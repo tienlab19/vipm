@@ -1,6 +1,8 @@
 # In-App Purchase — Premium Lifetime Access
 
-Deferred: not part of version `1.0.0 (5)`. Keep this configuration for a future reviewed release. Do not attach this product or its promotional/review assets to the first submission.
+Enabled for the next reviewed app version. Attach this product and its review assets to that version's submission.
+
+Release binary: `1.0.1 (1)`.
 
 | Field | Value |
 | --- | --- |
@@ -14,16 +16,16 @@ Deferred: not part of version `1.0.0 (5)`. Keep this configuration for a future 
 ## Localization: English (U.S.)
 
 - Display name: `Premium Lifetime Access`
-- Description: `Unlock all questions and premium practice.`
+- Description: `Unlock all questions and premium practice. Remove ads.`
 
 ## Localization: Vietnamese
 
 - Display name: `Premium trọn đời`
-- Description: `Mở khóa toàn bộ câu hỏi và chế độ luyện.`
+- Description: `Mở khóa toàn bộ câu hỏi, chế độ luyện và loại bỏ quảng cáo.`
 
 ## Review notes
 
-This non-consumable purchase permanently unlocks the complete 800-question bank, Flash Challenge, Time Trial, bookmarks, and incorrect-answer practice. Open Profile → “Unlock the full question bank” to reach the paywall. Use “Restore Purchases” to test restoration.
+This non-consumable purchase permanently unlocks the complete 800-question bank, Flash Challenge, Time Trial, bookmarks, incorrect-answer practice, and removes ads. Open Profile → “Unlock the full question bank” to reach the paywall. Use “Restore Purchases” to test restoration.
 
 ## Assets
 
@@ -33,4 +35,4 @@ This non-consumable purchase permanently unlocks the complete 800-question bank,
 
 ## Submission order
 
-Do not submit IAP with version 1.0.0 (build 5). For the future version that enables IAP, complete product metadata, price, availability and review information, then include the product with that app version's review submission.
+Complete product metadata, price, availability and review information, then include the product with the next app version's review submission.

@@ -66,17 +66,21 @@ struct ProductTourView: View {
 
             HStack(spacing: 12) {
                 if index > 0 {
-                    Button("Back") { withAnimation { index -= 1 } }
-                        .font(.h(15)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.28), lineWidth: 1.5))
+                    Button { withAnimation { index -= 1 } } label: {
+                        Text("Back").font(.h(15)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 16)
+                            .contentShape(Rectangle())
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.28), lineWidth: 1.5))
+                    }.buttonStyle(.plain)
                 }
-                Button(isLast ? "Get started" : "Next") {
+                Button {
                     if isLast { onFinish() } else { withAnimation { index += 1 }; Track.log("tour_step", ["step": index]) }
-                }
-                .font(.h(15.5)).foregroundStyle(Color.navy)
-                .frame(maxWidth: .infinity).padding(.vertical, 17)
-                .background(.white, in: .rect(cornerRadius: 16))
+                } label: {
+                    Text(isLast ? "Get started" : "Next").font(.h(15.5)).foregroundStyle(Color.navy)
+                        .frame(maxWidth: .infinity).padding(.vertical, 17)
+                        .contentShape(Rectangle())
+                        .background(.white, in: .rect(cornerRadius: 16))
+                }.buttonStyle(.plain)
             }
             .padding(.horizontal, 24).padding(.bottom, 28)
         }

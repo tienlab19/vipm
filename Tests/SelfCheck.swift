@@ -1,9 +1,7 @@
 import Foundation
 
 enum Track {
-    static func log(_ event: String, _ parameters: [String: Any] = [:]) {
-        fatalError("Disabled IAP must not emit StoreKit events: \(event)")
-    }
+    static func log(_ event: String, _ parameters: [String: Any] = [:]) {}
 }
 
 @main
@@ -15,33 +13,22 @@ struct SelfCheck {
         assert(bank.isDemo && bank.parts.count == 1 && bank.parts[0].questions.count == 2)
         let appBank = try JSONQuestionBankRepository(url: URL(fileURLWithPath: CommandLine.arguments[2])).load()
         assert(!appBank.parts.isEmpty && !appBank.all.isEmpty, "The bundled question bank must decode.")
+        assert(AppFeatures.inAppPurchasesEnabled, "Premium purchases must remain enabled.")
+        assert(PremiumStore.productID == "com.viuniverse.pspo.one.premium",
+               "Release Product ID must match App Store Connect.")
+        assert(AppFeatures.shouldShowAds(isPremium: false), "Free users should be eligible for ads.")
+        assert(!AppFeatures.shouldShowAds(isPremium: true), "Premium must be ad-free.")
+        assert(AppFeatures.canRequestAds(isPremium: false, consentAllowsAds: true))
+        assert(!AppFeatures.canRequestAds(isPremium: false, consentAllowsAds: false))
+        assert(!AppFeatures.canRequestAds(isPremium: true, consentAllowsAds: true),
+               "Premium must stay ad-free even when consent allows ads.")
+        assert(AppFeatures.shouldShowExamResultInterstitial(isPremium: false, isExam: true))
+        assert(!AppFeatures.shouldShowExamResultInterstitial(isPremium: false, isExam: false))
+        assert(!AppFeatures.shouldShowExamResultInterstitial(isPremium: true, isExam: true))
         let freeApp = StudyUseCase(bank: appBank, progressRepository: MemoryProgressRepository(), isPremium: false)
         let premiumApp = StudyUseCase(bank: appBank, progressRepository: MemoryProgressRepository(), isPremium: true)
         assert(freeApp.unlockedQuestions.count == freeApp.freeQuestionLimit && freeApp.freeQuestionLimit == 30)
         assert(premiumApp.unlockedQuestions.count == appBank.all.count && appBank.all.count == 800)
-        if !AppFeatures.inAppPurchasesEnabled {
-            let store = PremiumStore()
-            await store.prepare()
-            await store.purchase()
-            await store.restore()
-            assert(!store.isPremium, "Full access must not fabricate a StoreKit entitlement.")
-            assert(!store.isBusy && store.displayPrice == nil && store.message == nil)
-            let launchModel = StudyViewModel(bankRepository: FixtureBankRepository(bank: appBank),
-                                            progressRepository: MemoryProgressRepository(),
-                                            isPremium: !AppFeatures.inAppPurchasesEnabled)
-            assert(launchModel.study.unlockedQuestions.count == 800)
-            for part in appBank.parts {
-                assert(launchModel.session(for: part.id)?.session.questions.count == part.questions.count)
-            }
-            assert(launchModel.session(for: "exam")?.session.questions.count == 80)
-            for count in launchModel.study.flashCounts {
-                assert(launchModel.session(for: "flash-\(count)")?.session.questions.count == count)
-            }
-            guard let trial = launchModel.session(for: "timetrial") else { fatalError("Time Trial is locked") }
-            assert(trial.session.questions.count == launchModel.study.timeTrialCount)
-            assert(launchModel.retake(trial) != nil)
-            assert(launchModel.study.draft(for: "timetrial") != nil)
-        }
         let single = bank.parts[0].questions[0]
         let multi = bank.parts[0].questions[1]
         assert(single.correct == [2] && multi.correct == [1, 3])
@@ -298,18 +285,9 @@ struct SelfCheck {
             defaults.set(localFlag, forKey: "premium")
             let composed = makeStudyViewModel(defaults: defaults)
             assert(composed.bankError == nil && composed.study.bank.all.count == 2)
-            assert(composed.study.isPremium == !AppFeatures.inAppPurchasesEnabled,
-                   "Launch access follows the release policy, never a saved Premium flag.")
-            if !AppFeatures.inAppPurchasesEnabled {
-                assert(composed.study.unlockedQuestions.count == composed.study.bank.all.count)
-                assert(composed.session(for: "exam") != nil)
-                for count in composed.study.flashCounts {
-                    assert(composed.session(for: "flash-\(count)") != nil)
-                }
-                assert(composed.session(for: "timetrial") != nil)
-                if !composed.study.bookmarks.contains(single.id) { composed.toggleBookmark(single) }
-                assert(composed.session(for: "bookmarks") != nil)
-            }
+            assert(!composed.study.isPremium, "Launch access follows verified StoreKit entitlement, never a saved Premium flag.")
+            assert(composed.session(for: "timetrial") == nil)
+            assert(composed.session(for: "bookmarks") == nil)
         }
         let corrupt = Data("broken".utf8)
         defaults.set(corrupt, forKey: "studyProgress.v1")

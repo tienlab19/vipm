@@ -22,7 +22,7 @@ Prepare for the Professional Scrum Product Owner I assessment with focused pract
 
 PRACTICE WITH PURPOSE
 • Work through a structured bank of 800 questions and explanations.
-• Access all questions and study modes without an in-app purchase.
+• Try 30 questions free. Premium unlocks all questions, study modes, and removes ads.
 • Practice by topic and review missed questions.
 
 SIMULATE EXAM DAY
@@ -41,8 +41,8 @@ TRACK YOUR PROGRESS
 • Set a planned exam date and receive optional local reminders.
 • Choose English or Vietnamese interface text.
 
-FULL ACCESS
-This version includes the complete question bank and all study modes for free. No account or in-app purchase is required.
+FREE TO START, PREMIUM TO MASTER
+Try 30 questions free. A one-time Premium purchase unlocks the complete question bank, every study mode, and an ad-free experience.
 
 PSPOPrep is an independent study aid. It is not affiliated with, endorsed by, or sponsored by Scrum.org. PSPO and Professional Scrum Product Owner are trademarks of their respective owner. This app does not provide an official exam or guarantee certification results.
 

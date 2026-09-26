@@ -159,6 +159,16 @@
         }
       }
     },
+    "All features unlocked · No ads": {
+      "localizations": {
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Đã mở khóa mọi tính năng · Không quảng cáo"
+          }
+        }
+      }
+    },
     "A focused, ad-free study experience": {
       "localizations": {
         "vi": {
@@ -727,6 +737,16 @@
         }
       }
     },
+    "Manage ad privacy choices": {
+      "localizations": {
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quản lý lựa chọn quyền riêng tư quảng cáo"
+          }
+        }
+      }
+    },
     "Minutes": {
       "localizations": {
         "vi": {
@@ -884,6 +904,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mở hồ sơ"
+          }
+        }
+      }
+    },
+    "Privacy choices": {
+      "localizations": {
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lựa chọn quyền riêng tư"
           }
         }
       }

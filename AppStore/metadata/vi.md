@@ -22,7 +22,7 @@ Chuẩn bị cho bài đánh giá Professional Scrum Product Owner I bằng các
 
 LUYỆN TẬP CÓ MỤC TIÊU
 • Học với ngân hàng 800 câu hỏi kèm lời giải.
-• Sử dụng toàn bộ câu hỏi và chế độ học mà không cần mua trong ứng dụng.
+• Học thử 30 câu miễn phí. Premium mở toàn bộ câu hỏi, chế độ học và loại bỏ quảng cáo.
 • Luyện theo từng phần và xem lại câu đã bỏ qua.
 
 MÔ PHỎNG NGÀY THI
@@ -41,8 +41,8 @@ THEO DÕI TIẾN ĐỘ
 • Đặt ngày thi dự kiến và nhận nhắc nhở cục bộ tùy chọn.
 • Chọn giao diện tiếng Anh hoặc tiếng Việt.
 
-ĐẦY ĐỦ TÍNH NĂNG
-Phiên bản này miễn phí toàn bộ ngân hàng câu hỏi và mọi chế độ học. Không cần tài khoản hoặc mua trong ứng dụng.
+HỌC THỬ MIỄN PHÍ, MỞ KHÓA PREMIUM
+Học thử 30 câu miễn phí. Một lần mua Premium mở toàn bộ ngân hàng câu hỏi, mọi chế độ học và trải nghiệm không quảng cáo.
 
 PSPOPrep là công cụ học tập độc lập, không liên kết, không được chứng thực hoặc tài trợ bởi Scrum.org. PSPO và Professional Scrum Product Owner là nhãn hiệu của chủ sở hữu tương ứng. Ứng dụng không cung cấp bài thi chính thức và không bảo đảm kết quả chứng chỉ.
 

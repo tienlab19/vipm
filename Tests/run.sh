@@ -4,6 +4,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT="$(mktemp -d /tmp/vipm-check.XXXXXX)"
 trap 'rm -rf "$OUTPUT"' EXIT
 cp "$ROOT/Tests/questions.fixture.json" "$OUTPUT/questions.json"
+PRODUCT_ID="$(plutil -extract products.0.productID raw "$ROOT/vipm/Premium.storekit")"
+if [[ "$PRODUCT_ID" != "com.viuniverse.pspo.one.premium" ]]; then
+    echo "Premium.storekit Product ID does not match App Store Connect: $PRODUCT_ID" >&2
+    exit 1
+fi
 SOURCES=("$ROOT"/vipm/Domain/*.swift "$ROOT"/vipm/Data/*.swift "$ROOT"/vipm/Presentation/ViewModels/*.swift "$ROOT/vipm/App/AppComposition.swift" "$ROOT/vipm/App/PremiumStore.swift" "$ROOT/Tests/SelfCheck.swift")
 if grep -En 'SwiftUI|UIKit|Observation|UserDefaults|Bundle|JSONDecoder|JSONEncoder|ViewModel|#if DEBUG' "$ROOT"/vipm/Domain/*.swift; then
     echo 'Domain must not depend on presentation, storage adapters, or build configuration.' >&2

@@ -21,7 +21,7 @@ Chạy `bash Tests/run.sh`. Bộ test biên dịch Domain độc lập, sau đó
 | MODE-02 | Thi | Form tối đa 80 câu không trùng, retake giữ form | Đúng số lượng và thứ tự theo yêu cầu |
 | PREMIUM-01 | Premium | Free tối đa 30 câu; Premium đủ 800 câu | Không rò câu khóa |
 | PREMIUM-02 | Premium | Thu hồi entitlement khi có draft/retake/route cũ | Chế độ Premium bị khóa lại |
-| RELEASE-01 | Bản đầu | Khởi tạo app với IAP tắt, cờ Premium cũ true/false | Đầy đủ ngân hàng, Exam, Flash, Time Trial, Bookmarks; không phụ thuộc giao dịch |
+| RELEASE-01 | Bản Premium | Khởi tạo app không có entitlement | Chỉ 30 câu miễn phí; các chế độ Premium bị khóa |
 | PROGRESS-01 | Tiến độ | Bookmark, answered, wrong, missed, readiness | Lọc theo entitlement và cập nhật đúng |
 | DRAFT-01 | Draft | Lưu, resume, latest, retake | Khôi phục đúng vị trí/state; tạo ID mới khi retake |
 | DRAFT-02 | Draft | Draft rỗng, trùng ID, index sai, route cũ | Bỏ qua draft không hợp lệ |
@@ -44,16 +44,32 @@ Chạy `bash Tests/run.sh`. Bộ test biên dịch Domain độc lập, sau đó
 
 | ID | Test case | Kết quả mong đợi |
 | --- | --- | --- |
-| IAP-01 | Bản đầu: Home, Practice, Saved, Profile, nút Save trong quiz | Không paywall, PRO lock, mua, restore hoặc đổi mã; đủ 800 câu |
-| IAP-02 | Bản đầu: khởi động offline, mở lại app, draft và retake | Mọi tính năng vẫn mở, không cần giao dịch StoreKit |
+| IAP-01 | Free: Home, Practice, Saved, Profile, nút Save trong quiz | Hiện PRO/paywall đúng chỗ; giới hạn 30 câu; banner chỉ ở root Home |
+| IAP-02 | Mua hoặc restore Premium | Mở đủ 800 câu và mọi chế độ; banner biến mất ngay, lần mở sau không khởi tạo AdMob |
+| IAP-03 | Refund/revoke entitlement | Khóa lại chế độ Premium; banner Home được phép hiển thị lại |
 | NOTIFY-01 | Cho phép/từ chối notification | Không crash; chỉ tạo reminder tương lai |
 | UI-01 | Dynamic Type, VoiceOver, light mode, EN/VI | Nội dung đọc được, nút có nhãn, không cắt chữ nghiêm trọng |
 | UI-02 | Background/foreground khi đang thi | Đồng hồ dựa trên deadline, tự nộp khi quá hạn |
 | NET-01 | Ảnh câu hỏi mất mạng/URL lỗi | Có trạng thái lỗi; quiz vẫn dùng được |
 
-Kiểm thử mua/pending/cancel/restore/revoke chỉ áp dụng khi bật lại IAP ở bản sau; các test Domain về giới hạn quyền vẫn chạy để tránh regression.
+Kiểm thử mua/pending/cancel/restore/revoke bằng StoreKit configuration và sandbox trước khi gửi bản duyệt.
 
 `ponytail:` UI, StoreKit và notification cần Simulator/device; nâng cấp thành XCUITest/StoreKitTest khi pipeline CI có runtime iOS ổn định.
+
+## Kết quả đóng gói 2026-09-25 — version 1.0.1 build 1
+
+- Release archive và App Store export: PASS.
+- IPA: `build/20260925-1.0.1-build1-111817/ipa/PSPOPrep-1.0.1-1.ipa`.
+- Bundle `com.viuniverse.pspo-one`, minimum iOS `17.0`, Apple Distribution, `get-task-allow = false`.
+- Không chứa `Premium.storekit`; có `PrivacyInfo.xcprivacy` và Product ID `com.viuniverse.pspo.one.premium`.
+
+## Kết quả thực thi 2026-09-25 — build 6 Premium IAP
+
+- `bash Tests/run.sh`: PASS cả có/không có `DEBUG`; Product ID code và `Premium.storekit` cùng là `com.viuniverse.pspo.one.premium`.
+- StoreKit local: PASS mua non-consumable, kích hoạt Premium, mở đủ 800 câu, tắt banner/interstitial, giữ entitlement sau khi khởi động lại.
+- Release archive/export: PASS với `1.0.0 (6)`, iOS `17.0+`, team `7GH7MJS7R2`, chữ ký Apple Distribution và `get-task-allow = false`.
+- IPA không chứa `Premium.storekit`; `PrivacyInfo.xcprivacy`, ngân hàng câu hỏi và Product ID production đều có trong artifact.
+- Pending, cancel, restore và revoke vẫn cần chạy thêm bằng StoreKit configuration hoặc sandbox trước khi submit review.
 
 ## Kết quả thực thi 2026-09-23 — build 5 không IAP
 

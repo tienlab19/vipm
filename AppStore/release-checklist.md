@@ -22,14 +22,15 @@
 - [ ] Content rights question answered only after license confirmation.
 - [ ] Accessibility Nutrition Labels left blank until VoiceOver/Larger Text audit passes, or entered accurately.
 
-## First release: no IAP
+## Premium IAP
 
-- [x] `AppFeatures.inAppPurchasesEnabled = false` for Debug and Release.
-- [x] All 800 questions and every study mode included without a transaction.
-- [x] Product loading, transaction listener, purchase and restore disabled.
-- [ ] No IAP product attached to this submission; no IAP promotion enabled.
-- [ ] EN-US and VI metadata describe full access without a purchase.
-- [ ] Screenshots contain no paywall or Premium promotion.
+- [x] `AppFeatures.inAppPurchasesEnabled = true` for Debug and Release.
+- [x] Free access limited to 30 questions; Premium unlocks all questions and modes.
+- [x] Premium entitlement disables AdMob before SDK initialization and hides an active banner immediately after purchase.
+- [x] Product loading, transaction listener, purchase and restore enabled.
+- [ ] Non-consumable `com.viuniverse.pspo.one.premium` attached to this submission.
+- [x] EN-US and VI metadata, screenshots and review notes describe Premium and ad removal accurately.
+- [ ] Purchase, pending, cancel, restore and revoke tested with StoreKit configuration and sandbox.
 
 ## Assets
 
@@ -43,23 +44,24 @@
 
 - [x] `bash Tests/run.sh` passes.
 - [x] Release archive built with Xcode 26.3 / iOS 26.2 SDK.
-- [x] Version `1.0.0`, build `5` confirmed in archive and IPA.
+- [x] Version `1.0.1`, build `1` confirmed in archive and IPA.
 - [x] Minimum OS `17.0` confirmed.
 - [x] `PrivacyInfo.xcprivacy` exists in app bundle.
 - [x] `ITSAppUsesNonExemptEncryption = NO` exists in built Info.plist.
 - [x] Local archive validation passes; only the non-blocking AppIntents metadata extraction warning remains.
 - [x] IPA signed for Apple Developer Team `7GH7MJS7R2` with Cloud Managed Apple Distribution.
-- [x] `codesign --verify --deep --strict` passes for the exported build 5 app; `get-task-allow = false`.
+- [x] `codesign --verify --deep --strict` passes for the exported build 1 app; `get-task-allow = false`.
 - [x] StoreKit test configuration excluded from the app bundle.
+- [x] App Store IPA exported at `build/20260925-1.0.1-build1-111817/ipa/PSPOPrep-1.0.1-1.ipa`.
 - [ ] Upload through Xcode Organizer or Transporter.
-- [ ] Processed build selected in version 1.0.0.
+- [ ] Processed build selected in version 1.0.1.
 - [ ] Export compliance shows no missing compliance.
 
 ## Final review
 
-- [ ] All parts, 80-question exams, Flash, Time Trial, bookmarks and review work without purchase or login.
-- [ ] No paywall, purchase, restore, redeem-code buttons or PRO locks in either language.
-- [ ] Full access survives relaunch, offline use and restoring a saved draft.
+- [ ] Free users receive 30 questions and see PRO/paywall gates at every Premium entry point.
+- [ ] Premium users receive all parts, 80-question exams, Flash, Time Trial, bookmarks and review without ads.
+- [ ] Premium entitlement survives relaunch; restore re-enables Premium; revoke returns the app to free access.
 - [ ] Privacy policy matches actual Firebase Analytics behavior.
 - [ ] Reviewer notes pasted from `app-review.md`.
 - [ ] Manual release selected for first production launch.

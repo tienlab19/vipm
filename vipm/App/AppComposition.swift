@@ -1,8 +1,20 @@
 import Foundation
 
 enum AppFeatures {
-    // ponytail: First release includes full access; enable IAP only in a new reviewed build.
-    static let inAppPurchasesEnabled = false
+    static let inAppPurchasesEnabled = true
+    static let adsEnabled = true
+
+    static func shouldShowAds(isPremium: Bool) -> Bool {
+        adsEnabled && !isPremium
+    }
+
+    static func canRequestAds(isPremium: Bool, consentAllowsAds: Bool) -> Bool {
+        shouldShowAds(isPremium: isPremium) && consentAllowsAds
+    }
+
+    static func shouldShowExamResultInterstitial(isPremium: Bool, isExam: Bool) -> Bool {
+        shouldShowAds(isPremium: isPremium) && isExam
+    }
 }
 
 func makeStudyViewModel(bundle: Bundle = .main, defaults: UserDefaults = .standard,

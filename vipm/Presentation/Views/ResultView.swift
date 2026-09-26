@@ -2,10 +2,12 @@ import SwiftUI
 
 struct ResultView: View {
     @Environment(StudyViewModel.self) private var viewModel
+    @Environment(AdMobService.self) private var adMob
     let session: QuizSession
     @Binding var path: [Route]
     let retake: () -> Void
     @State private var review = false
+    @State private var requestedInterstitial = false
 
     private var passed: Bool { !session.gradedQuestions.isEmpty && session.score >= viewModel.study.passBar }
 
@@ -23,6 +25,16 @@ struct ResultView: View {
             Track.log("result_view", ["passed": passed, "is_exam": session.deadline != nil,
                                       "score": Int((session.score * 100).rounded()),
                                       "correct": session.correctCount, "graded": session.gradedQuestions.count])
+        }
+        .task {
+            guard !requestedInterstitial,
+                  AppFeatures.shouldShowExamResultInterstitial(
+                    isPremium: viewModel.study.isPremium,
+                    isExam: session.deadline != nil
+                  ) else { return }
+            requestedInterstitial = true
+            try? await Task.sleep(for: .milliseconds(350))
+            adMob.presentExamResultInterstitial()
         }
     }
 

@@ -40,6 +40,7 @@ private enum MainTab: String, CaseIterable {
 
 struct HomeView: View {
     @Environment(StudyViewModel.self) private var viewModel
+    @Environment(AdMobService.self) private var adMob
     @State private var tab = MainTab.home
     @State private var path: [Route] = []
     @State private var showPaywall = false
@@ -88,7 +89,14 @@ struct HomeView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) { if path.isEmpty { bottomNav } }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if path.isEmpty {
+                    VStack(spacing: 0) {
+                        if shouldShowAds { AdBannerView() }
+                        bottomNav
+                    }
+                }
+            }
         }
         .tint(.brand).background(Color.bg)
         .preferredColorScheme(.light)
@@ -394,7 +402,29 @@ struct HomeView: View {
                             Image(systemName: "chevron.right")
                         }.foregroundStyle(Color.navy).card()
                     }.buttonStyle(.plain)
-                    if !viewModel.study.isPremium {
+                    if adMob.privacyOptionsRequired && !viewModel.study.isPremium {
+                        Button { Task { await adMob.presentPrivacyOptions() } } label: {
+                            HStack(spacing: 12) {
+                                IconChip(systemName: "hand.raised", tint: .brand, size: 40)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Privacy choices").font(.h(15))
+                                    Text("Manage ad privacy choices").font(.caption).foregroundStyle(Color.slate)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                            }.foregroundStyle(Color.navy).card()
+                        }.buttonStyle(.plain)
+                    }
+                    if viewModel.study.isPremium {
+                        HStack(spacing: 12) {
+                            IconChip(systemName: "checkmark.seal.fill", tint: .green, size: 40)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Premium is active").font(.h(15))
+                                Text("All features unlocked · No ads").font(.caption).foregroundStyle(Color.slate)
+                            }
+                            Spacer()
+                        }.foregroundStyle(Color.navy).card()
+                    } else {
                         Button { showPaywall = true; Track.log("paywall_open", ["source": "profile"]) } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "crown.fill").foregroundStyle(Color.amber)
@@ -460,6 +490,9 @@ struct HomeView: View {
     }
     
     private var initials: String { viewModel.study.learnerName.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased() }
+    private var shouldShowAds: Bool {
+        AppFeatures.shouldShowAds(isPremium: viewModel.study.isPremium)
+    }
     private var plannedExamDateText: String {
         guard let date = viewModel.study.plannedExamDate else { return String(localized: "Set exam date") }
         return date.formatted(date: .long, time: .omitted)
